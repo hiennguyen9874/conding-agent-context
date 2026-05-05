@@ -1,0 +1,778 @@
+{
+    "model": "minimax-m2.7",
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.\n\nAvailable tools:\n- read: Read file contents\n- bash: Execute bash commands (ls, grep, find, etc.)\n- edit: Make precise file edits with exact text replacement, including multiple disjoint edits in one call\n- write: Create or overwrite files\n- ask_user: Ask the user one focused question with optional multiple-choice answers to gather information interactively\n- mcp: MCP gateway - connect to MCP servers and call their tools\n- intercom: Use to coordinate with other local pi sessions: list peers, send updates, ask for help, or check intercom connectivity.\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.\n\nGuidelines:\n- Use bash for file operations like ls, rg, find\n- Use read to examine files instead of cat or sed.\n- Use edit for precise changes (edits[].oldText must match exactly)\n- When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls\n- Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.\n- Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.\n- Use write only for new files or complete rewrites.\n- Before calling ask_user, gather context with tools (read/web/ref) and pass a short summary via the context field.\n- Use ask_user when the user's intent is ambiguous, when a decision requires explicit user input, or when multiple valid options exist.\n- Ask exactly one focused question per ask_user call.\n- Do not combine multiple numbered, multipart, or unrelated questions into one ask_user prompt.\n- Be concise in your responses\n- Show file paths clearly when working with files\n\n\n## Tool Call Behavior\n\n- Before a meaningful non-read tool call, send one concise sentence describing the immediate action.\n- Always preface edits, write operations, destructive actions, and verification commands.\n- Skip it for routine reads, obvious follow-up searches, and repetitive low-signal tool calls.\n- When you preface a tool call, make that tool call in the same turn.\n- Do not narrate every small step. Group low-level actions when possible.\n\n\n## Behavioral guidelines\n\nBehavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.\n\n**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.\n\n### 1. Think Before Coding\n\n**Don't assume. Don't hide confusion. Surface tradeoffs.**\n\nBefore implementing:\n- State your assumptions explicitly. If uncertain, ask.\n- If multiple interpretations exist, present them - don't pick silently.\n- If a simpler approach exists, say so. Push back when warranted.\n- If something is unclear, stop. Name what's confusing. Ask.\n\n### 2. Simplicity First\n\n**Minimum code that solves the problem. Nothing speculative.**\n\n- No features beyond what was asked.\n- No abstractions for single-use code.\n- No \"flexibility\" or \"configurability\" that wasn't requested.\n- No error handling for impossible scenarios.\n- If you write 200 lines and it could be 50, rewrite it.\n\nAsk yourself: \"Would a senior engineer say this is overcomplicated?\" If yes, simplify.\n\n### 3. Surgical Changes\n\n**Touch only what you must. Clean up only your own mess.**\n\nWhen editing existing code:\n- Don't \"improve\" adjacent code, comments, or formatting.\n- Don't refactor things that aren't broken.\n- Match existing style, even if you'd do it differently.\n- If you notice unrelated dead code, mention it - don't delete it.\n\nWhen your changes create orphans:\n- Remove imports/variables/functions that YOUR changes made unused.\n- Don't remove pre-existing dead code unless asked.\n\nThe test: Every changed line should trace directly to the user's request.\n\n### 4. Goal-Driven Execution\n\n**Define success criteria. Loop until verified.**\n\nTransform tasks into verifiable goals:\n- \"Add validation\" → \"Write tests for invalid inputs, then make them pass\"\n- \"Fix the bug\" → \"Write a test that reproduces it, then make it pass\"\n- \"Refactor X\" → \"Ensure tests pass before and after\"\n\nFor multi-step tasks, state a brief plan:\n```\n1. [Step] → verify: [check]\n2. [Step] → verify: [check]\n3. [Step] → verify: [check]\n```\n\nStrong success criteria let you loop independently. Weak criteria (\"make it work\") require constant clarification.\n\n---\n\n**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.\n\n# Project Context\n\nProject-specific instructions and guidelines:\n\n## /home/hiennx/Documents/portfolio-management-v2/AGENTS.md\n\n# AGENTS.md\n\nPortfolio management monorepo: Go backend in `api/`, React SPA frontend in `frontend/`, and product/architecture docs in `docs/`.\n\n## Quick Reference\n\n- Current implementation truth: `CONTEXT.md`\n- Architecture decisions: `docs/adr/README.md`\n- Backend workdir: `cd api`\n- Frontend workdir: `cd frontend`\n- Minimum backend verification: `cd api && GOCACHE=/tmp/go-build go test ./...`\n- Minimum frontend verification: `cd frontend && pnpm test`\n- Docker stack: `docker compose up -d --build` (runs `migrate` before `api` and `worker`)\n- Full CI/pre-push command surface: read `docs/agent-instructions/commands-and-env.md`\n\n## Mini Repo Map\n\n- `api/`: Go backend, Huma/Fiber HTTP API, worker, migrations, sqlc queries/generated code.\n- `frontend/`: React SPA, TanStack Router/Query, Zod API-boundary parsing.\n- `docs/`: PRD, UX, architecture notes, agent instructions.\n- `docker-compose.yml`: Postgres, Redis, API, worker, migrate, web, Traefik stack.\n\n## Critical Rules\n\n- Treat checked-in Go/React code as implementation baseline; do not mirror legacy Python codebase.\n- Keep portfolio pipeline explicit: source-of-truth writes -> projection rebuild -> snapshot/metrics read models.\n- Use portfolio timezone as business-date boundary in rebuild logic.\n- Missing required price data during snapshot generation is hard failure.\n- Do not manually edit generated SQLC code in `api/db/sqlc`.\n- Keep frontend flows portfolio-centered with one active portfolio context.\n- Preserve API-boundary validation: Huma on backend, Zod parsing on frontend.\n\n## Instruction Index\n\nRead these only when task matches scope:\n\n| File | Read when | Contains |\n|---|---|---|\n| `docs/agent-instructions/project-context.md` | Task changes product behavior, domain flow, portfolio ownership, or source-of-truth assumptions | Product model, domain contracts, source docs |\n| `docs/agent-instructions/architecture-and-runtime.md` | Task changes backend/frontend boundaries, API routing, async jobs, rebuild flow, or Docker runtime | Runtime shape, layers, request/job flow, wiring rules |\n| `docs/agent-instructions/development-rules.md` | Task adds or modifies backend/frontend code, DB schema/query files, API contracts, or UI flow structure | Placement rules, layer boundaries, SQLC workflow, naming, UI guardrails |\n| `docs/agent-instructions/commands-and-env.md` | Task needs setup, run, build, test, lint, CI, security, migration, sqlc, or env commands | Exact commands, workdirs, env vars, verification expectations |\n| `docs/agent-instructions/quality-and-risk.md` | Task touches finance math, auth, ownership, external sync, async locks, read models, performance, or risky tests | High-risk areas, security guardrails, performance rules, focused test priorities |\n\n## Reference Docs\n\n- Current implementation truth: `CONTEXT.md`\n- Architecture decision records: `docs/adr/README.md`\n- Product requirements: `docs/prd.md`\n- UX direction: `docs/developments/ui-ux-design.md`\n- Backend deep dive: `api/README.md`\n- Backend workspace rules: `api/AGENTS.md`\n- Frontend workspace rules: `frontend/AGENTS.md`\n\n\n\n\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>brainstorming</name>\n    <description>You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/brainstorming/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>code-reviewer</name>\n    <description>Use when reviewing completed implementation work, validating a finished task or plan step, comparing code against requirements or intended architecture, or performing a PR-style review. Reviews must run in two phases: spec alignment first, code quality second.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/code-reviewer/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>context7-cli</name>\n    <description>Use the ctx7 CLI to fetch library documentation, manage AI coding skills, and configure Context7 MCP. Activate when the user mentions &quot;ctx7&quot; or &quot;context7&quot;, needs current docs for any library, wants to install/search/generate skills, or needs to set up Context7 for their AI coding agent.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/context7-cli/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>diagnose</name>\n    <description>Disciplined diagnosis loop for hard bugs and performance regressions. Reproduce → minimise → hypothesise → instrument → fix → regression-test. Use when user says &quot;diagnose this&quot; / &quot;debug this&quot;, reports a bug, says something is broken/throwing/failing, or describes a performance regression.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/diagnose/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>dispatching-parallel-agents</name>\n    <description>Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/dispatching-parallel-agents/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>executing-plans</name>\n    <description>Use when you have a written implementation plan to execute in a separate session with review checkpoints</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/executing-plans/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>finishing-a-development-branch</name>\n    <description>Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/finishing-a-development-branch/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>git-commit</name>\n    <description>Execute git commit with conventional commit message analysis, intelligent staging, and message generation. Use when user asks to commit changes, create a git commit, or mentions &quot;/commit&quot;. Supports: (1) Auto-detecting type and scope from changes, (2) Generating conventional commit messages from diff, (3) Interactive commit with optional type/scope/description overrides, (4) Intelligent file staging for logical grouping</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/git-commit/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>grill-me</name>\n    <description>Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each branch of the decision tree. Use when user wants to stress-test a plan, get grilled on their design, or mentions &quot;grill me&quot;.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/grill-me/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>improve-codebase-architecture</name>\n    <description>Find deepening opportunities in a codebase, informed by the domain language in CONTEXT.md and the decisions in docs/adr/. Use when the user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/improve-codebase-architecture/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>pragmatic-principles</name>\n    <description>Use when reviewing or implementing code where there is risk of over-engineering, unclear abstractions, or duplication. Apply pragmatic YAGNI, KISS, and DRY checks to keep changes simple, maintainable, and aligned with current requirements.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/pragmatic-principles/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>receiving-code-review</name>\n    <description>Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/receiving-code-review/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>requesting-code-review</name>\n    <description>Use when completing tasks, implementing major features, or before merging to verify work meets requirements</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/requesting-code-review/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>subagent-driven-development</name>\n    <description>Use when executing a written plan folder in the current session with one implementer subagent per phase, followed by independent spec and code-quality review for each phase</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/subagent-driven-development/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>systematic-debugging</name>\n    <description>Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/systematic-debugging/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>test-driven-development</name>\n    <description>Use when implementing any feature, bugfix, refactor, behavior change, or when user asks for TDD/red-green-refactor/test-first development.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/test-driven-development/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>using-superpowers</name>\n    <description>Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/using-superpowers/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>verification-before-completion</name>\n    <description>Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/verification-before-completion/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>writing-plans</name>\n    <description>Use when you have a spec or requirements for a multi-step task, before touching code</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/skills/writing-plans/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>find-skills</name>\n    <description>Helps users discover and install agent skills when they ask questions like &quot;how do I do X&quot;, &quot;find a skill for X&quot;, &quot;is there a skill that can...&quot;, or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.</description>\n    <location>/home/hiennx/.agents/skills/find-skills/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ask-user</name>\n    <description>You MUST use this before high-stakes architectural decisions, irreversible changes, or when requirements are ambiguous. Runs a decision handshake with the ask_user tool: summarize context, present structured options, collect explicit user choice, then proceed.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/pi-ask-user/skills/ask-user/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>context-mode</name>\n    <description>Use context-mode tools (ctx_execute, ctx_execute_file) instead of Bash/cat when processing\nlarge outputs. Triggers: &quot;analyze logs&quot;, &quot;summarize output&quot;, &quot;process data&quot;,\n&quot;parse JSON&quot;, &quot;filter results&quot;, &quot;extract errors&quot;, &quot;check build output&quot;,\n&quot;analyze dependencies&quot;, &quot;process API response&quot;, &quot;large file analysis&quot;,\n&quot;page snapshot&quot;, &quot;browser snapshot&quot;, &quot;DOM structure&quot;, &quot;inspect page&quot;,\n&quot;accessibility tree&quot;, &quot;Playwright snapshot&quot;,\n&quot;run tests&quot;, &quot;test output&quot;, &quot;coverage report&quot;, &quot;git log&quot;, &quot;recent commits&quot;,\n&quot;diff between branches&quot;, &quot;list containers&quot;, &quot;pod status&quot;, &quot;disk usage&quot;,\n&quot;fetch docs&quot;, &quot;API reference&quot;, &quot;index documentation&quot;,\n&quot;call API&quot;, &quot;check response&quot;, &quot;query results&quot;,\n&quot;find TODOs&quot;, &quot;count lines&quot;, &quot;codebase statistics&quot;, &quot;security audit&quot;,\n&quot;outdated packages&quot;, &quot;dependency tree&quot;, &quot;cloud resources&quot;, &quot;CI/CD output&quot;.\nAlso triggers on ANY MCP tool output that may exceed 20 lines.\nSubagent routing is handled automatically via PreToolUse hook.\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/context-mode/skills/context-mode/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>context-mode-ops</name>\n    <description>Manage context-mode GitHub issues, PRs, releases, and marketing with parallel subagent army. Orchestrates 10-20 dynamic agents per task. Use when triaging issues, reviewing PRs, releasing versions, writing LinkedIn posts, announcing releases, fixing bugs, merging contributions, validating ENV vars, testing adapters, or syncing branches.</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/context-mode/skills/context-mode-ops/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ctx-doctor</name>\n    <description>Run context-mode diagnostics. Checks runtimes, hooks, FTS5,\nplugin registration, npm and marketplace versions.\nTrigger: /context-mode:ctx-doctor\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/context-mode/skills/ctx-doctor/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ctx-insight</name>\n    <description>Open the context-mode Insight analytics dashboard in the browser.\nShows personal metrics: session activity, tool usage, error rate,\nparallel work patterns, project focus, and actionable insights.\nFirst run installs dependencies (~30s). Subsequent runs open instantly.\nTrigger: /context-mode:ctx-insight\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/context-mode/skills/ctx-insight/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ctx-purge</name>\n    <description>Purge the context-mode knowledge base. Permanently deletes all indexed content\nand resets session stats. This is destructive and cannot be undone.\nTrigger: /context-mode:ctx-purge\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/context-mode/skills/ctx-purge/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ctx-stats</name>\n    <description>Show how much context window context-mode saved this session.\nDisplays token consumption, context savings ratio, and per-tool breakdown.\nRead-only — shows stats only, no reset capability.\nTo wipe the knowledge base entirely, use ctx_purge instead.\nTrigger: /context-mode:ctx-stats\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/context-mode/skills/ctx-stats/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ctx-upgrade</name>\n    <description>Update context-mode from GitHub and fix hooks/settings.\nPulls latest, builds, installs, updates npm global, configures hooks.\nTrigger: /context-mode:ctx-upgrade\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/context-mode/skills/ctx-upgrade/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>prompt-template-authoring</name>\n    <description>Write and run custom Pi prompt templates (slash commands) for this extension.\nUse when creating templates with model selection, deterministic pre-steps,\nloops, chains, subagents, or best-of-N compare flows.\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/pi-prompt-template-model/skills/prompt-template-authoring/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>pi-subagents</name>\n    <description>Delegate work to builtin or custom subagents with single-agent, chain,\nparallel, async, forked-context, and intercom-coordinated workflows. Use\nfor advisory review, implementation handoffs, and multi-step tasks where a\nsingle agent should stay in control while other agents contribute context,\nplanning, or execution.\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/pi-subagents/skills/pi-subagents/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>pi-intercom</name>\n    <description>Streamline session-to-session coordination with pi-intercom. Send messages,\ndelegate tasks, and coordinate work across multiple pi sessions on the same\nmachine. Use for planner-worker workflows, cross-session context sharing,\nand real-time collaboration between sessions.\n</description>\n    <location>/home/hiennx/Documents/portfolio-management-v2/.pi/npm/node_modules/pi-intercom/skills/pi-intercom/SKILL.md</location>\n  </skill>\n</available_skills>\nCurrent date: 2026-05-05\nCurrent working directory: /home/hiennx/Documents/portfolio-management-v2\n\nCAVEMAN MODE: full. Respond terse like smart caveman. All technical substance stay. Only fluff die.\nDrop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging.\nFragments OK. Short synonyms. Technical terms exact. Code blocks unchanged. Errors quoted exact.\nPattern: [thing] [action] [reason]. [next step].\nNot: \"Sure! I'd be happy to help you with that. The issue you're experiencing is likely caused by...\"\nYes: \"Bug in auth middleware. Token expiry check use `<` not `<=`. Fix:\"\nAuto-Clarity: drop caveman for security warnings, irreversible actions, multi-step sequences where fragment order risks misread, user asks to clarify. Resume after.\nBoundaries: code/commits/PRs write normal. \"stop caveman\" or \"normal mode\" to revert.\n\nRTK note: If file edits repeatedly fail because old text does not match, ask the user to manually run '/rtk' in the Pi TUI, disable 'Read source filtering enabled', re-read the file, apply the edit, then ask the user to manually re-enable it in the Pi TUI."
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Hello"
+                }
+            ]
+        }
+    ],
+    "stream": true,
+    "stream_options": {
+        "include_usage": true
+    },
+    "store": false,
+    "max_completion_tokens": 16384,
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "read",
+                "description": "Read the contents of a file. Supports text files and images (jpg, png, gif, webp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.",
+                "parameters": {
+                    "type": "object",
+                    "required": [
+                        "path"
+                    ],
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to read (relative or absolute)"
+                        },
+                        "offset": {
+                            "type": "number",
+                            "description": "Line number to start reading from (1-indexed)"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "Maximum number of lines to read"
+                        }
+                    }
+                },
+                "strict": false
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "bash",
+                "description": "Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.",
+                "parameters": {
+                    "type": "object",
+                    "required": [
+                        "command"
+                    ],
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "Bash command to execute"
+                        },
+                        "timeout": {
+                            "type": "number",
+                            "description": "Timeout in seconds (optional, no default timeout)"
+                        }
+                    }
+                },
+                "strict": false
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "edit",
+                "description": "Edit a single file using exact text replacement. Every edits[].oldText must match a unique, non-overlapping region of the original file. If two changes affect the same block or nearby lines, merge them into one edit instead of emitting overlapping edits. Do not include large unchanged regions just to connect distant changes.",
+                "parameters": {
+                    "type": "object",
+                    "required": [
+                        "path",
+                        "edits"
+                    ],
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to edit (relative or absolute)"
+                        },
+                        "edits": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": [
+                                    "oldText",
+                                    "newText"
+                                ],
+                                "properties": {
+                                    "oldText": {
+                                        "type": "string",
+                                        "description": "Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call."
+                                    },
+                                    "newText": {
+                                        "type": "string",
+                                        "description": "Replacement text for this targeted edit."
+                                    }
+                                },
+                                "additionalProperties": false
+                            },
+                            "description": "One or more targeted replacements. Each edit is matched against the original file, not incrementally. Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead."
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "strict": false
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "write",
+                "description": "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
+                "parameters": {
+                    "type": "object",
+                    "required": [
+                        "path",
+                        "content"
+                    ],
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to write (relative or absolute)"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Content to write to the file"
+                        }
+                    }
+                },
+                "strict": false
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ask_user",
+                "description": "Ask the user a question with optional multiple-choice answers. Use this to gather information interactively. Ask exactly one focused question per call. Before calling, gather context with tools (read/web/ref) and pass a short summary via the context field.",
+                "parameters": {
+                    "type": "object",
+                    "required": [
+                        "question"
+                    ],
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "The question to ask the user"
+                        },
+                        "context": {
+                            "type": "string",
+                            "description": "Relevant context to show before the question (summary of findings)"
+                        },
+                        "options": {
+                            "type": "array",
+                            "items": {
+                                "anyOf": [
+                                    {
+                                        "type": "string",
+                                        "description": "Short title for this option"
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "title"
+                                        ],
+                                        "properties": {
+                                            "title": {
+                                                "type": "string",
+                                                "description": "Short title for this option"
+                                            },
+                                            "description": {
+                                                "type": "string",
+                                                "description": "Longer description explaining this option"
+                                            }
+                                        }
+                                    }
+                                ]
+                            },
+                            "description": "List of options for the user to choose from"
+                        },
+                        "allowMultiple": {
+                            "type": "boolean",
+                            "description": "Allow selecting multiple options. Default: false"
+                        },
+                        "allowFreeform": {
+                            "type": "boolean",
+                            "description": "Add a freeform text option. Default: true"
+                        },
+                        "allowComment": {
+                            "type": "boolean",
+                            "description": "Collect an optional comment after selecting one or more options. Default: false"
+                        },
+                        "timeout": {
+                            "type": "number",
+                            "description": "Auto-dismiss after N milliseconds. Returns null (cancelled) when expired."
+                        }
+                    }
+                },
+                "strict": false
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "mcp",
+                "description": "MCP gateway - connect to MCP servers and call their tools. Non-MCP Pi tools should be called directly, not through mcp.\n\nServers: context-mode (11 tools)\n\nUsage:\n  mcp({ })                              → Show server status\n  mcp({ server: \"name\" })               → List tools from server\n  mcp({ search: \"query\" })              → Search MCP tools by name/description\n  mcp({ describe: \"tool_name\" })        → Show tool details and parameters\n  mcp({ connect: \"server-name\" })       → Connect to a server and refresh metadata\n  mcp({ tool: \"name\", args: '{\"key\": \"value\"}' })    → Call a tool (args is JSON string)\n  mcp({ action: \"ui-messages\" })        → Retrieve accumulated messages from completed UI sessions\n\nMode: tool (call) > connect > describe > search > server (list) > action > nothing (status)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {
+                            "type": "string",
+                            "description": "Tool name to call (e.g., 'xcodebuild_list_sims')"
+                        },
+                        "args": {
+                            "type": "string",
+                            "description": "Arguments as JSON string (e.g., '{\"key\": \"value\"}')"
+                        },
+                        "connect": {
+                            "type": "string",
+                            "description": "Server name to connect (lazy connect + metadata refresh)"
+                        },
+                        "describe": {
+                            "type": "string",
+                            "description": "Tool name to describe (shows parameters)"
+                        },
+                        "search": {
+                            "type": "string",
+                            "description": "Search tools by name/description"
+                        },
+                        "regex": {
+                            "type": "boolean",
+                            "description": "Treat search as regex (default: substring match)"
+                        },
+                        "includeSchemas": {
+                            "type": "boolean",
+                            "description": "Include parameter schemas in search results (default: true)"
+                        },
+                        "server": {
+                            "type": "string",
+                            "description": "Filter to specific server (also disambiguates tool calls)"
+                        },
+                        "action": {
+                            "type": "string",
+                            "description": "Action: 'ui-messages' to retrieve prompts/intents from UI sessions"
+                        }
+                    }
+                },
+                "strict": false
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "subagent",
+                "description": "Delegate to subagents or manage agent definitions.\n\nEXECUTION (use exactly ONE mode):\n• Before executing, use { action: \"list\" } to inspect configured agents/chains. Only execute agents listed as executable/non-disabled.\n• SINGLE: { agent, task? } - one task; omit task for self-contained agents\n• CHAIN: { chain: [{agent:\"agent-a\"}, {parallel:[{agent:\"agent-b\",count:3}]}] } - sequential pipeline with optional parallel fan-out\n• PARALLEL: { tasks: [{agent,task,count?,output?,reads?,progress?}, ...], concurrency?: number, worktree?: true } - concurrent execution (worktree: isolate each task in a git worktree)\n• Optional context: { context: \"fresh\" | \"fork\" } (default: if any requested agent has defaultContext: \"fork\", the whole invocation uses fork; otherwise \"fresh\"; inspect agent defaults via { action: \"list\" })\n\nCHAIN TEMPLATE VARIABLES (use in task strings):\n• {task} - The original task/request from the user\n• {previous} - Text response from the previous step (empty for first step)\n• {chain_dir} - Shared directory for chain files (e.g., <tmpdir>/pi-subagents-<scope>/chain-runs/abc123/)\n\nExample: { chain: [{agent:\"agent-a\", task:\"Analyze {task}\"}, {agent:\"agent-b\", task:\"Plan based on {previous}\"}] }\n\nMANAGEMENT (use action field, omit agent/task/chain/tasks):\n• { action: \"list\" } - discover executable agents/chains\n• { action: \"get\", agent: \"name\" } - full detail\n• { action: \"create\", config: { name, systemPrompt, systemPromptMode, inheritProjectContext, inheritSkills, defaultContext, ... } }\n• { action: \"update\", agent: \"name\", config: { ... } } - merge\n• { action: \"delete\", agent: \"name\" }\n• Use chainName for chain operations\n\nCONTROL:\n• { action: \"status\", id: \"...\" } - inspect an async/background run by id or prefix\n• { action: \"interrupt\", id?: \"...\" } - soft-interrupt the current child turn and leave the run paused\n\nDIAGNOSTICS:\n• { action: \"doctor\" } - read-only report for runtime paths, discovery, sessions, and intercom",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "agent": {
+                            "type": "string",
+                            "description": "Agent name (SINGLE mode) or target for management get/update/delete"
+                        },
+                        "task": {
+                            "type": "string",
+                            "description": "Task (SINGLE mode, optional for self-contained agents)"
+                        },
+                        "action": {
+                            "type": "string",
+                            "description": "Action: 'list', 'get', 'create', 'update', 'delete', 'status', 'interrupt', or 'doctor' diagnostics. Omit for execution mode."
+                        },
+                        "id": {
+                            "type": "string",
+                            "description": "Run id or prefix for action='status' or action='interrupt'."
+                        },
+                        "runId": {
+                            "type": "string",
+                            "description": "Target run ID for action='interrupt'. Defaults to the most recently active controllable run in this session. Prefer id for new calls."
+                        },
+                        "dir": {
+                            "type": "string",
+                            "description": "Async run directory for action='status'."
+                        },
+                        "chainName": {
+                            "type": "string",
+                            "description": "Chain name for get/update/delete management actions"
+                        },
+                        "config": {
+                            "type": [
+                                "object",
+                                "string"
+                            ],
+                            "additionalProperties": true,
+                            "description": "Agent or chain config for create/update. Agent: name, description, scope ('user'|'project', default 'user'), systemPrompt, systemPromptMode, inheritProjectContext, inheritSkills, defaultContext ('fresh'|'fork'), model, tools (comma-separated), extensions (comma-separated), skills (comma-separated), thinking, output, reads, progress, maxSubagentDepth. Chain: name, description, scope, steps (array of {agent, task?, output?, reads?, model?, skills?, progress?}). Presence of 'steps' creates a chain instead of an agent. String values must be valid JSON."
+                        },
+                        "tasks": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": [
+                                    "agent",
+                                    "task"
+                                ],
+                                "properties": {
+                                    "agent": {
+                                        "type": "string"
+                                    },
+                                    "task": {
+                                        "type": "string"
+                                    },
+                                    "cwd": {
+                                        "type": "string"
+                                    },
+                                    "count": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "description": "Repeat this parallel task N times with the same settings."
+                                    },
+                                    "output": {
+                                        "type": [
+                                            "string",
+                                            "boolean"
+                                        ],
+                                        "description": "Output filename/path (string), or false to disable file output"
+                                    },
+                                    "reads": {
+                                        "type": [
+                                            "array",
+                                            "boolean"
+                                        ],
+                                        "anyOf": [
+                                            {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            {
+                                                "type": "boolean"
+                                            }
+                                        ],
+                                        "description": "Files to read before running (array of filenames), or false to disable"
+                                    },
+                                    "progress": {
+                                        "type": "boolean",
+                                        "description": "Enable progress.md tracking for this task"
+                                    },
+                                    "model": {
+                                        "type": "string",
+                                        "description": "Override model for this task (e.g. 'google/gemini-3-pro')"
+                                    },
+                                    "skill": {
+                                        "type": [
+                                            "string",
+                                            "array",
+                                            "boolean"
+                                        ],
+                                        "anyOf": [
+                                            {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            {
+                                                "type": "boolean"
+                                            },
+                                            {
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "Skill name(s) to inject (comma-separated), array of strings, or boolean (false disables, true uses default)"
+                                    }
+                                }
+                            },
+                            "description": "PARALLEL mode: [{agent, task, count?, output?, reads?, progress?}, ...]"
+                        },
+                        "concurrency": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Top-level PARALLEL mode only: max concurrent tasks. Defaults to config.parallel.concurrency or 4."
+                        },
+                        "worktree": {
+                            "type": "boolean",
+                            "description": "Create isolated git worktrees for each parallel task. Prevents filesystem conflicts. Requires clean git state. Per-worktree diffs included in output."
+                        },
+                        "chain": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "agent": {
+                                        "type": "string",
+                                        "description": "Sequential step agent name"
+                                    },
+                                    "task": {
+                                        "type": "string",
+                                        "description": "Task template with variables: {task}=original request, {previous}=prior step's text response, {chain_dir}=shared folder. Required for first step, defaults to '{previous}' for subsequent steps."
+                                    },
+                                    "cwd": {
+                                        "type": "string"
+                                    },
+                                    "output": {
+                                        "type": [
+                                            "string",
+                                            "boolean"
+                                        ],
+                                        "description": "Output filename/path (string), or false to disable file output"
+                                    },
+                                    "reads": {
+                                        "type": [
+                                            "array",
+                                            "boolean"
+                                        ],
+                                        "anyOf": [
+                                            {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            {
+                                                "type": "boolean"
+                                            }
+                                        ],
+                                        "description": "Files to read before running (array of filenames), or false to disable"
+                                    },
+                                    "progress": {
+                                        "type": "boolean",
+                                        "description": "Enable progress.md tracking in {chain_dir}"
+                                    },
+                                    "skill": {
+                                        "type": [
+                                            "string",
+                                            "array",
+                                            "boolean"
+                                        ],
+                                        "anyOf": [
+                                            {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            {
+                                                "type": "boolean"
+                                            },
+                                            {
+                                                "type": "string"
+                                            }
+                                        ],
+                                        "description": "Skill name(s) to inject (comma-separated), array of strings, or boolean (false disables, true uses default)"
+                                    },
+                                    "model": {
+                                        "type": "string",
+                                        "description": "Override model for this step"
+                                    },
+                                    "parallel": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "agent"
+                                            ],
+                                            "properties": {
+                                                "agent": {
+                                                    "type": "string"
+                                                },
+                                                "task": {
+                                                    "type": "string",
+                                                    "description": "Task template with {task}, {previous}, {chain_dir} variables. Defaults to {previous}."
+                                                },
+                                                "cwd": {
+                                                    "type": "string"
+                                                },
+                                                "count": {
+                                                    "type": "integer",
+                                                    "minimum": 1,
+                                                    "description": "Repeat this parallel task N times with the same settings."
+                                                },
+                                                "output": {
+                                                    "type": [
+                                                        "string",
+                                                        "boolean"
+                                                    ],
+                                                    "description": "Output filename/path (string), or false to disable file output"
+                                                },
+                                                "reads": {
+                                                    "type": [
+                                                        "array",
+                                                        "boolean"
+                                                    ],
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        {
+                                                            "type": "boolean"
+                                                        }
+                                                    ],
+                                                    "description": "Files to read before running (array of filenames), or false to disable"
+                                                },
+                                                "progress": {
+                                                    "type": "boolean",
+                                                    "description": "Enable progress.md tracking in {chain_dir}"
+                                                },
+                                                "skill": {
+                                                    "type": [
+                                                        "string",
+                                                        "array",
+                                                        "boolean"
+                                                    ],
+                                                    "anyOf": [
+                                                        {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        {
+                                                            "type": "boolean"
+                                                        },
+                                                        {
+                                                            "type": "string"
+                                                        }
+                                                    ],
+                                                    "description": "Skill name(s) to inject (comma-separated), array of strings, or boolean (false disables, true uses default)"
+                                                },
+                                                "model": {
+                                                    "type": "string",
+                                                    "description": "Override model for this task"
+                                                }
+                                            }
+                                        },
+                                        "minItems": 1,
+                                        "description": "Tasks to run in parallel"
+                                    },
+                                    "concurrency": {
+                                        "type": "number",
+                                        "description": "Max concurrent tasks (default: 4)"
+                                    },
+                                    "failFast": {
+                                        "type": "boolean",
+                                        "description": "Stop on first failure (default: false)"
+                                    },
+                                    "worktree": {
+                                        "type": "boolean",
+                                        "description": "Create isolated git worktrees for each parallel task."
+                                    }
+                                },
+                                "description": "Chain step: use {agent, task?, ...} for sequential or {parallel: [...]} for concurrent execution"
+                            },
+                            "description": "CHAIN mode: sequential pipeline where each step's response becomes {previous} for the next. Use {task}, {previous}, {chain_dir} in task templates."
+                        },
+                        "context": {
+                            "type": "string",
+                            "enum": [
+                                "fresh",
+                                "fork"
+                            ],
+                            "description": "'fresh' or 'fork' to branch from parent session. If omitted, any requested agent with defaultContext: 'fork' makes the whole invocation forked; otherwise the default is 'fresh'."
+                        },
+                        "chainDir": {
+                            "type": "string",
+                            "description": "Persistent directory for chain artifacts. Default: a user-scoped temp directory under <tmpdir>/ (auto-cleaned after 24h)"
+                        },
+                        "async": {
+                            "type": "boolean",
+                            "description": "Run in background (default: false, or per config)"
+                        },
+                        "agentScope": {
+                            "type": "string",
+                            "description": "Agent discovery scope: 'user', 'project', or 'both' (default: 'both'; project wins on name collisions)"
+                        },
+                        "cwd": {
+                            "type": "string"
+                        },
+                        "artifacts": {
+                            "type": "boolean",
+                            "description": "Write debug artifacts (default: true)"
+                        },
+                        "includeProgress": {
+                            "type": "boolean",
+                            "description": "Include full progress in result (default: false)"
+                        },
+                        "share": {
+                            "type": "boolean",
+                            "description": "Upload session to GitHub Gist for sharing (default: false)"
+                        },
+                        "sessionDir": {
+                            "type": "string",
+                            "description": "Directory to store session logs (default: temp; enables sessions even if share=false)"
+                        },
+                        "clarify": {
+                            "type": "boolean",
+                            "description": "Show TUI to preview/edit before execution (default: true for chains, false for single/parallel). Implies sync mode."
+                        },
+                        "control": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {
+                                    "type": "boolean",
+                                    "description": "Enable/disable subagent control attention tracking for this run"
+                                },
+                                "needsAttentionAfterMs": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "No-observed-activity window before a run needs attention"
+                                },
+                                "activeNoticeAfterMs": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Active-long-running notice threshold by elapsed ms (default: 300000)"
+                                },
+                                "activeNoticeAfterTurns": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Active-long-running notice threshold by assistant turns (default: 15)"
+                                },
+                                "activeNoticeAfterTokens": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Active-long-running notice threshold by total tokens (default: 150000)"
+                                },
+                                "failedToolAttemptsBeforeAttention": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Consecutive mutating-tool failures before escalating to needs_attention (default: 3)"
+                                },
+                                "notifyOn": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "enum": [
+                                            "active_long_running",
+                                            "needs_attention"
+                                        ]
+                                    },
+                                    "description": "Control event types that should notify the parent/orchestrator. Defaults to active_long_running and needs_attention."
+                                },
+                                "notifyChannels": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "enum": [
+                                            "event",
+                                            "async",
+                                            "intercom"
+                                        ]
+                                    },
+                                    "description": "Notification channels to use when available. Defaults to event, async, and intercom."
+                                }
+                            }
+                        },
+                        "output": {
+                            "type": [
+                                "string",
+                                "boolean"
+                            ],
+                            "description": "Output file for single agent (string), or false to disable. Relative paths resolve against cwd."
+                        },
+                        "skill": {
+                            "type": [
+                                "string",
+                                "array",
+                                "boolean"
+                            ],
+                            "anyOf": [
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "string"
+                                }
+                            ],
+                            "description": "Skill name(s) to inject (comma-separated), array of strings, or boolean (false disables, true uses default)"
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "Override model for single agent (e.g. 'anthropic/claude-sonnet-4')"
+                        }
+                    }
+                },
+                "strict": false
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "intercom",
+                "description": "Send a message to another pi session running on this machine.\nUse this to communicate findings, request help, or coordinate work with other sessions.\n\nUsage:\n  intercom({ action: \"list\" })                    → List active sessions\n  intercom({ action: \"send\", to: \"session-name\", message: \"...\" })  → Send message\n  intercom({ action: \"ask\", to: \"session-name\", message: \"...\" })   → Ask and wait for reply\n  intercom({ action: \"reply\", message: \"...\" })                      → Reply to the active/single pending ask\n  intercom({ action: \"pending\" })                                      → List unresolved inbound asks\n  intercom({ action: \"status\" })                  → Show connection status",
+                "parameters": {
+                    "type": "object",
+                    "required": [
+                        "action"
+                    ],
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "description": "Action: 'list', 'send', 'ask', 'reply', 'pending', or 'status'"
+                        },
+                        "to": {
+                            "type": "string",
+                            "description": "Target session name or ID (for 'send', 'ask', or disambiguating 'reply')"
+                        },
+                        "message": {
+                            "type": "string",
+                            "description": "Message to send (for 'send', 'ask', or 'reply' action)"
+                        },
+                        "attachments": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": [
+                                    "type",
+                                    "name",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "type": {
+                                        "anyOf": [
+                                            {
+                                                "type": "string",
+                                                "const": "file"
+                                            },
+                                            {
+                                                "type": "string",
+                                                "const": "snippet"
+                                            },
+                                            {
+                                                "type": "string",
+                                                "const": "context"
+                                            }
+                                        ]
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "content": {
+                                        "type": "string"
+                                    },
+                                    "language": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        },
+                        "replyTo": {
+                            "type": "string",
+                            "description": "Message ID to reply to (for threading or responding to an 'ask')"
+                        }
+                    }
+                },
+                "strict": false
+            }
+        }
+    ]
+}

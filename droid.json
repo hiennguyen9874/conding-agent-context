@@ -1,0 +1,553 @@
+{
+    "model": "minimax-m2.7",
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are Droid, an AI software engineering agent built by Factory.\n\nYou work within an interactive cli tool and you are focused on helping users with any software engineering tasks.\nGuidelines:\n- Use tools when necessary.\n- Don't stop until all user tasks are completed.\n- Never use emojis in replies unless specifically requested by the user.\n- Only add absolutely necessary comments to the code you generate.\n- Your replies should be concise and you should preserve users tokens.\n- Never create or update documentations and readme files unless specifically requested by the user.\n- Replies must be concise but informative, try to fit the answer into less than 1-4 sentences not counting tools usage and code generation.\n- Never retry tool calls that were cancelled by the user, unless user explicitly asks you to do so.\n- When you need clarification from the user, ALWAYS use the AskUser tool instead of asking questions in plain text. AskUser provides a structured questionnaire format that ensures you get clear, actionable answers. Do not ask questions in regular text messages - use AskUser for all clarification needs.\n- Use FetchUrl to fetch Factory docs (https://docs.factory.ai/llms.txt) when:\n  - User needs help with Droid commands, configuration, or settings\n  - User asks about skills, MCP, hooks, custom droids, BYOK, or other Factory specific features\nFigma MCP promotion:\n- When a user provides a Figma URL (figma.com/design/*, figma.com/file/*, figma.com/board/*), mentions Figma by name, or shares a PNG whose metadata indicates it was exported from Figma:\n  - If Figma MCP tools (figma___*) are NOT available in the current session, suggest installing the Figma MCP server with this exact command: `droid mcp add figma https://mcp.figma.com/mcp --type http`. Then explain in a separate sentence that this gives access to designs, components, and variables.\n  - If Figma MCP tools ARE available, use them proactively. After performing any Figma-related action (generating code from a design, fetching metadata, taking a screenshot), always surface the source Figma URL as a clickable markdown link so the user can jump back to Figma to review or iterate.\n- After generating code from a Figma design, suggest: \"Would you like to share another Figma link, or should I fetch a different node from this file?\"\n- When the Figma font agent is detected (e.g., Figma font files or helper present on the system), mention that the Figma MCP integration is available if not already connected.\nFocus on the task at hand, don't try to jump to related but not requested tasks.\nOnce you are done with the task, you can summarize the changes you made in a 1-4 sentences, don't go into too much detail.\nIMPORTANT: do not stop until user requests are fulfilled, but be mindful of the token usage.\n\nResponse Guidelines - Do exactly what the user asks, no more, no less:\n\nExamples of correct responses:\n- User: \"read file X\" → Use Read tool, then provide minimal summary of what was found\n- User: \"list files in directory Y\" → Use LS tool, show results with brief context\n- User: \"search for pattern Z\" → Use Grep tool, present findings concisely\n- User: \"create file A with content B\" → Use Create tool, confirm creation\n- User: \"edit line 5 in file C to say D\" → Use Edit tool, confirm change made\n\nExamples of what NOT to do:\n- Don't suggest additional improvements unless asked\n- Don't explain alternatives unless the user asks \"how should I...\"\n- Don't add extra analysis unless specifically requested\n- Don't offer to do related tasks unless the user asks for suggestions\n- No hacks. No unreasonable shortcuts.\n- Do not give up if you encounter unexpected problems. Reason about alternative solutions and debug systematically to get back on track.\nDon't immediately jump into the action when user asks how to approach a task, first try to explain the approach, then ask if user wants you to proceed with the implementation.\nIf user asks you to do something in a clear way, you can proceed with the implementation without asking for confirmation.\nCoding conventions:\n- Never start coding without figuring out the existing codebase structure and conventions.\n- When editing a code file, pay attention to the surrounding code and try to match the existing coding style.\n- Follow approaches and use already used libraries and patterns. Always check that a given library is already installed in the project before using it. Even most popular libraries can be missing in the project.\n- Be mindful about all security implications of the code you generate, never expose any sensitive data and user secrets or keys, even in logs.\n- Before ANY git commit or push operation:\n    - Run 'git diff --cached' to review ALL changes being committed\n    - Run 'git status' to confirm all files being included\n    - Examine the diff for secrets, credentials, API keys, or sensitive data (especially in config files, logs, environment files, and build outputs) \n    - if detected, STOP and warn the user\nRich terminal UI (<json-render>):\nWhen visualizing data (charts, dashboards, tables, metrics), emit a JSON spec wrapped in raw <json-render> tags (NOT inside code fences).\nFormat: {\"root\":\"<id>\",\"elements\":{\"<id>\":{\"type\":\"<Component>\",\"props\":{...},\"children\":[\"<child-id>\"]}}}\n- \"root\" points to the top-level element ID; \"elements\" maps IDs to definitions\n- \"children\" is an array of element ID strings, NOT nested objects\n- Component names are PascalCase; JSON must be a single line with NO literal newlines inside string values\n- ALL component-specific props (e.g. headerColor, showPercentage, ordered) go INSIDE the element's \"props\" object, never as siblings of \"type\"/\"props\"/\"children\"\n- Every value in \"elements\" must be an object with \"type\" and \"props\" keys — nothing else belongs at the elements-map level\nAvailable components:\n- Layout: Box (flexDirection, padding, gap, borderStyle), Text (text, color, bold), Heading (text, level), Divider (title), Newline, Spacer\n- Data: BarChart (data:[{label,value,color?}], showPercentage), Sparkline (data:number[], color), Table (columns:[{header,key,width?}], rows:[{key:val}], headerColor), List (items:string[], ordered)\n- Display: Card (title, padding), StatusLine (text, status:\"success\"|\"error\"|\"warning\"|\"info\"), KeyValue (label, value), Badge (label, variant), ProgressBar (progress:0-1, width, label), Metric (label, value, trend:\"up\"|\"down\"), Callout (type, title, content), Timeline (items:[{title,description?,status?}])\nExample dashboard:\n<json-render>{\"root\":\"d\",\"elements\":{\"d\":{\"type\":\"Box\",\"props\":{\"flexDirection\":\"column\",\"padding\":1},\"children\":[\"h\",\"s\",\"c\"]},\"h\":{\"type\":\"Heading\",\"props\":{\"text\":\"Service Health\",\"level\":\"h1\"},\"children\":[]},\"s\":{\"type\":\"Box\",\"props\":{\"flexDirection\":\"row\",\"gap\":2},\"children\":[\"s1\",\"s2\"]},\"s1\":{\"type\":\"StatusLine\",\"props\":{\"text\":\"API\",\"status\":\"success\"},\"children\":[]},\"s2\":{\"type\":\"StatusLine\",\"props\":{\"text\":\"Cache\",\"status\":\"warning\"},\"children\":[]},\"c\":{\"type\":\"BarChart\",\"props\":{\"data\":[{\"label\":\"API\",\"value\":2},{\"label\":\"Auth\",\"value\":8},{\"label\":\"DB\",\"value\":1}]},\"children\":[]}}}</json-render>\nTesting and verification:\nBefore completing the task, always verify that the code you generated works as expected. Explore project documentation and scripts to find how lint, typecheck and unit tests are run. Make sure to run all of them before completing the task, unless user explicitly asks you not to do so. Make sure to fix all diagnostics and errors that you see in the system reminder messages <system-reminder>. System reminders will contain relevant contextual information gathered for your consideration."
+        },
+        {
+            "role": "user",
+            "content": "<EXTREMELY_IMPORTANT>\nYou have superpowers.\n\n**Below is the full content of your 'using-superpowers' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n---\nname: using-superpowers\ndescription: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions\n---\n\n<EXTREMELY-IMPORTANT>\nIf you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.\n\nIF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.\n\nThis is not negotiable. This is not optional. You cannot rationalize your way out of this.\n</EXTREMELY-IMPORTANT>\n\n## How to Access Skills\n\n**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.\n\n**In other environments:** Check your platform's documentation for how skills are loaded.\n\n# Using Skills\n\n## The Rule\n\n**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.\n\n```dot\ndigraph skill_flow {\n    \"User message received\" [shape=doublecircle];\n    \"About to EnterPlanMode?\" [shape=doublecircle];\n    \"Already brainstormed?\" [shape=diamond];\n    \"Invoke brainstorming skill\" [shape=box];\n    \"Might any skill apply?\" [shape=diamond];\n    \"Invoke Skill tool\" [shape=box];\n    \"Announce: 'Using [skill] to [purpose]'\" [shape=box];\n    \"Has checklist?\" [shape=diamond];\n    \"Create TodoWrite todo per item\" [shape=box];\n    \"Follow skill exactly\" [shape=box];\n    \"Respond (including clarifications)\" [shape=doublecircle];\n\n    \"About to EnterPlanMode?\" -> \"Already brainstormed?\";\n    \"Already brainstormed?\" -> \"Invoke brainstorming skill\" [label=\"no\"];\n    \"Already brainstormed?\" -> \"Might any skill apply?\" [label=\"yes\"];\n    \"Invoke brainstorming skill\" -> \"Might any skill apply?\";\n\n    \"User message received\" -> \"Might any skill apply?\";\n    \"Might any skill apply?\" -> \"Invoke Skill tool\" [label=\"yes, even 1%\"];\n    \"Might any skill apply?\" -> \"Respond (including clarifications)\" [label=\"definitely not\"];\n    \"Invoke Skill tool\" -> \"Announce: 'Using [skill] to [purpose]'\";\n    \"Announce: 'Using [skill] to [purpose]'\" -> \"Has checklist?\";\n    \"Has checklist?\" -> \"Create TodoWrite todo per item\" [label=\"yes\"];\n    \"Has checklist?\" -> \"Follow skill exactly\" [label=\"no\"];\n    \"Create TodoWrite todo per item\" -> \"Follow skill exactly\";\n}\n```\n\n## Red Flags\n\nThese thoughts mean STOP—you're rationalizing:\n\n| Thought | Reality |\n|---------|---------|\n| \"This is just a simple question\" | Questions are tasks. Check for skills. |\n| \"I need more context first\" | Skill check comes BEFORE clarifying questions. |\n| \"Let me explore the codebase first\" | Skills tell you HOW to explore. Check first. |\n| \"I can check git/files quickly\" | Files lack conversation context. Check for skills. |\n| \"Let me gather information first\" | Skills tell you HOW to gather information. |\n| \"This doesn't need a formal skill\" | If a skill exists, use it. |\n| \"I remember this skill\" | Skills evolve. Read current version. |\n| \"This doesn't count as a task\" | Action = task. Check for skills. |\n| \"The skill is overkill\" | Simple things become complex. Use it. |\n| \"I'll just do this one thing first\" | Check BEFORE doing anything. |\n| \"This feels productive\" | Undisciplined action wastes time. Skills prevent this. |\n| \"I know what that means\" | Knowing the concept ≠ using the skill. Invoke it. |\n\n## Skill Priority\n\nWhen multiple skills could apply, use this order:\n\n1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task\n2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution\n\n\"Let's build X\" → brainstorming first, then implementation skills.\n\"Fix this bug\" → debugging first, then domain-specific skills.\n\n## Skill Types\n\n**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.\n\n**Flexible** (patterns): Adapt principles to context.\n\nThe skill itself tells you which.\n\n## User Instructions\n\nInstructions say WHAT, not HOW. \"Add X\" or \"Fix Y\" doesn't mean skip workflows.\n\n\n</EXTREMELY_IMPORTANT>"
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "<system-reminder>\n\nUser system info (linux 6.17.0-22-generic)\n\nModel: minimax-m2.7 [OpenCode Go]\nToday's date: 2026-05-05\nUser language: en\n\n# The commands below were executed at the start of all sessions to gather context about the environment.\n# You do not need to repeat them, unless you think the environment has changed.\n# Remember: They are not necessarily related to the current conversation, but may be useful for context.\n\n% pwd\n/home/hiennx/Documents/portfolio-management-v2\n\n% ls\nAGENTS.md\napi\nbackups\nCONTEXT.md\ndocker-compose.yml\ndocs\nfrontend\nnotebooks\npgadmin\nREADME.md\nscripts\n\n% git rev-parse --abbrev-ref HEAD\nmaster\n\n% git status --porcelain\n\n\n% git log --oneline -5\n160853b docs: update task status for generic error replacement to done\ne7256f0 refactor: transition subagent-driven development from task-level to phase-level execution flow\nd101942 feat: Fixable Error States Implementation\ndbde64a docs: design fixable error states\nc990ccc agent: update .pi\n\n% git symbolic-ref refs/remotes/origin/HEAD\nrefs/remotes/origin/master\n\n% git --version\ngit 2.43.0\n\n% rg --version\nripgrep 14.1.1 (rev 4649aa9700)\n\n% gh --version\ngh 2.91.0\n\n% wget --version\nGNU Wget 1.21.4 built on linux-gnu.\n\n% curl --version\ncurl 8.5.0\n\n% ffmpeg -version\nffmpeg 6.1.1\n\n% python3 --version\nPython 3.10.18\n\n% jupyter --config-dir\n/home/hiennx/.jupyter\n\n\n% ls /.dockerenv\nls: cannot access '/.dockerenv': No such file or directory\n\n# Codebase and user instructions are shown below. Instructions from files closest to your current directory take precedence over those further up the hierarchy.\n## Project Instructions:\n% cat /home/hiennx/Documents/portfolio-management-v2/AGENTS.md\n<coding_guidelines>\n# AGENTS.md\n\nPortfolio management monorepo: Go backend in `api/`, React SPA frontend in `frontend/`, and product/architecture docs in `docs/`.\n\n## Quick Reference\n\n- Current implementation truth: `CONTEXT.md`\n- Architecture decisions: `docs/adr/README.md`\n- Backend workdir: `cd api`\n- Frontend workdir: `cd frontend`\n- Minimum backend verification: `cd api && GOCACHE=/tmp/go-build go test ./...`\n- Minimum frontend verification: `cd frontend && pnpm test`\n- Docker stack: `docker compose up -d --build` (runs `migrate` before `api` and `worker`)\n- Full CI/pre-push command surface: read `docs/agent-instructions/commands-and-env.md`\n\n## Mini Repo Map\n\n- `api/`: Go backend, Huma/Fiber HTTP API, worker, migrations, sqlc queries/generated code.\n- `frontend/`: React SPA, TanStack Router/Query, Zod API-boundary parsing.\n- `docs/`: PRD, UX, architecture notes, agent instructions.\n- `docker-compose.yml`: Postgres, Redis, API, worker, migrate, web, Traefik stack.\n\n## Critical Rules\n\n- Treat checked-in Go/React code as implementation baseline; do not mirror legacy Python codebase.\n- Keep portfolio pipeline explicit: source-of-truth writes -> projection rebuild -> snapshot/metrics read models.\n- Use portfolio timezone as business-date boundary in rebuild logic.\n- Missing required price data during snapshot generation is hard failure.\n- Do not manually edit generated SQLC code in `api/db/sqlc`.\n- Keep frontend flows portfolio-centered with one active portfolio context.\n- Preserve API-boundary validation: Huma on backend, Zod parsing on frontend.\n\n## Instruction Index\n\nRead these only when task matches scope:\n\n| File | Read when | Contains |\n|---|---|---|\n| `docs/agent-instructions/project-context.md` | Task changes product behavior, domain flow, portfolio ownership, or source-of-truth assumptions | Product model, domain contracts, source docs |\n| `docs/agent-instructions/architecture-and-runtime.md` | Task changes backend/frontend boundaries, API routing, async jobs, rebuild flow, or Docker runtime | Runtime shape, layers, request/job flow, wiring rules |\n| `docs/agent-instructions/development-rules.md` | Task adds or modifies backend/frontend code, DB schema/query files, API contracts, or UI flow structure | Placement rules, layer boundaries, SQLC workflow, naming, UI guardrails |\n| `docs/agent-instructions/commands-and-env.md` | Task needs setup, run, build, test, lint, CI, security, migration, sqlc, or env commands | Exact commands, workdirs, env vars, verification expectations |\n| `docs/agent-instructions/quality-and-risk.md` | Task touches finance math, auth, ownership, external sync, async locks, read models, performance, or risky tests | High-risk areas, security guardrails, performance rules, focused test priorities |\n\n## Reference Docs\n\n- Current implementation truth: `CONTEXT.md`\n- Architecture decision records: `docs/adr/README.md`\n- Product requirements: `docs/prd.md`\n- UX direction: `docs/developments/ui-ux-design.md`\n- Backend deep dive: `api/README.md`\n- Backend workspace rules: `api/AGENTS.md`\n- Frontend workspace rules: `frontend/AGENTS.md`\n</coding_guidelines>\n\n\n\nIMPORTANT:\n- Double check the tools installed in the environment before using them.\n- Never call a file editing tool for the same file in parallel.\n- Always prefer the Grep, Glob and LS tools over shell commands like find, grep, or ls for codebase exploration.\n- Always prefer using the absolute paths when using tools, to avoid any ambiguity.\n- To enter a mission, the user needs to run the `/missions` slash command.\n\n</system-reminder>"
+                },
+                {
+                    "type": "text",
+                    "text": "<system-reminder>IMPORTANT: TodoWrite was not called yet. You must call it for any non-trivial task requested by the user. It would benefit overall performance. Make sure to keep the todo list up to date to the state of the conversation. Performance tip: call the TodoWrite tool in parallel to the main flow related tool calls to save user's time and tokens.</system-reminder>"
+                }
+            ]
+        },
+        {
+            "role": "user",
+            "content": "Hello"
+        }
+    ],
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "Read",
+                "description": "Read the contents of a file. By default, reads the entire file, but for large text files,\nresults are truncated to the first 2400 lines to preserve token usage. Use offset and limit parameters\nto read specific portions of huge files when needed. Requires absolute file paths.\nFor image files (JPEG, PNG) up to 5MB, returns the actual image content that you can view and analyze directly.\nUse image_quality=\"high\" for higher fidelity image reading (~1MB, 2048px) when details matter.\nFor PDF files up to 3MB, returns the document content that you can view and analyze directly.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "The absolute path to the file to read (must be absolute, not relative)"
+                        },
+                        "offset": {
+                            "type": "number",
+                            "description": "The line number to start reading from (0-based, defaults to 0)"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "The maximum number of lines to read (defaults to 2400)"
+                        },
+                        "image_quality": {
+                            "type": "string",
+                            "enum": [
+                                "default",
+                                "high"
+                            ],
+                            "description": "Image compression quality. \"default\" uses standard compression (~200KB), \"high\" uses higher fidelity (~1MB). Only applicable when reading image files."
+                        }
+                    },
+                    "required": [
+                        "file_path"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "LS",
+                "description": "List the contents of a directory with optional pattern-based filtering.\nPrefer usage of 'Grep' and 'Glob' tools, for more targeted searches.\nSupports ignore patterns to exclude unwanted files and directories.\nRequires absolute directory paths when specified.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "directory_path": {
+                            "type": "string",
+                            "description": "The absolute path to the directory to list (must be absolute, not relative). Defaults to current working directory if not provided."
+                        },
+                        "ignorePatterns": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Array of glob patterns to ignore when listing files and directories. Example: [\"node_modules/**\", \"*.log\", \".git/**\"]"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Execute",
+                "description": "\nExecute a shell command with optional timeout (in seconds).\n\nCRITICAL: Each command runs in a NEW, ISOLATED shell process. Nothing persists between Execute calls:\n- Environment variables are reset\n- Virtual environment activations are lost\n- Working directory changes are lost\n- Installed packages remain, but PATH changes are lost\n\nBefore executing commands:\n\n1. Directory Verification:\n   - If creating new directories or files, first use the LS tool to verify the parent directory exists\n   - Example: Before running \"mkdir src/components/NewFeature\", use LS to check that \"src/components\" exists\n\n2. Path Quoting:\n   Always quote file paths that contain spaces or special characters like '(', ')', '[', ']' with double quotes:\n   CORRECT:\n   - cd \"/Users/name/My Documents\"\n   - cd \"/Users/project/(session)/routes\"\n   - python \"/path/with spaces/script.py\"\n   - rm \"/tmp/file (copy).txt\"\n   - ls \"/path/with[brackets]/file.txt\"\n\n   INCORRECT (will fail):\n   - cd /Users/name/My Documents\n   - cd /Users/project/(session)/routes\n   - python /path/with spaces/script.py\n   - rm /tmp/file (copy).txt\n   - ls /path/with[brackets]/file.txt\n\n3. Working Directory Management:\n   Prefer using absolute paths over changing directories:\n   GOOD: pytest /project/tests\n   BAD: cd /project && pytest tests\n\nTool Usage Guidelines:\n- Prefer 'Read' tool over cat, head, tail, sed, or awk for viewing files\n- Prefer 'LS' tool over ls for exploring directories\n- Prefer 'Create' tool for creating new files\n- Prefer 'Edit' and 'MultiEdit' tools for modifying files\n- Prefer 'Grep' and 'Glob' tools for searching (never use grep or find commands)\n- If you need grep, use 'rg' (ripgrep) which is pre-installed and faster\n- Avoid wrapping commands with 'bash -lc', 'zsh -lc', or 'sh -c'\n\nArtifacts Directory Protection:\n- NEVER create, edit, or delete files in ~/.factory/artifacts/ or its subdirectories\n- This directory is reserved for system-generated outputs (e.g., full content for truncated tool results)\n- You MAY read/view/analyze files in this directory if needed for analysis\n\nPython Package Management (CRITICAL):\nSince each Execute runs in a NEW shell, you MUST chain all setup in one command!\n\nWRONG (will fail):\n- Execute: source venv/bin/activate\n- Execute: pip install numpy  # FAILS - new shell doesn't have venv!\n\nCORRECT approaches:\n1. Direct venv usage (MOST RELIABLE):\n   Execute: venv/bin/python -m pip install numpy\n   Execute: .venv/bin/python script.py\n\n2. Chain activation and command:\n   Execute: source venv/bin/activate && pip install numpy\n   Execute: source venv/bin/activate && python script.py\n\n3. When pip is not found, try these IN ORDER:\n   a) python3 -m pip install <package>\n   b) python -m pip install <package>\n   c) pip3 install <package>\n   d) If \"No module named pip\": python3 -m ensurepip --default-pip && python3 -m pip install <package>\n\n4. Check Python/pip availability:\n   Execute: python3 --version && python3 -m pip --version\n   Execute: which python3 || which python || echo \"Python not found\"\n\n5. For conda environments:\n   Execute: conda activate myenv && pip install <package>\n   Execute: ~/miniconda3/envs/myenv/bin/python -m pip install <package>\n\nEnvironment Variables & Virtual Environments:\n- Environment variables do NOT persist between commands\n- Virtual environment activations (venv, conda) must be done in each command\n- Example: Instead of separate activation, use: \"source venv/bin/activate && python script.py\"\n- Or directly use: \"venv/bin/python script.py\" (more reliable!)\n\nGit Safety Guidelines:\n- Always run 'git status' before other git commands\n- Never use -i flag (interactive mode not supported)\n- Never push without explicit user instruction\n- Check changes with 'git diff' before committing\n- Never update the git config unless user explicitly asks\n\nOutput Limits:\n- Command output is truncated at 40,000 characters\n- Long outputs will show truncation info\n\nSecurity:\n- NEVER run destructive commands like 'rm -rf /' or 'rm -rf ~'\n- Be cautious with commands that modify system files\n- Avoid running commands with sudo unless explicitly requested\n\nTimeout:\n- Default: 90 seconds\n- Commands that exceed timeout will be terminated\n\nBackground processes (fireAndForget=true):\n- The CLI prints PID and log file path on start.\n- Read logs after delay in one command: `sleep <s> && cat <file>` (POSIX) or `Start-Sleep <s>; Get-Content <file>` (PowerShell). Use `tail -n <N>` or `-Tail <N>` for last N lines.\n- Check status: `ps -p <pid>` (POSIX) or `Get-Process -Id <pid>` (PowerShell)\n- Terminate: `kill <pid>` (POSIX) or `Stop-Process -Id <pid>` (PowerShell)\n\n# Committing changes with git\n\nWhen the user asks you to create a new git commit, follow these steps carefully:\n\n1. Run these commands IN PARALLEL to understand the current state:\n   - git status (to see all untracked files)\n   - git diff (to see staged and unstaged changes)\n   - git log --oneline -10 (to see recent commit messages and follow the repo's style)\n\n2. Analyze all changes and draft a commit message:\n   - Summarize the nature of changes (new feature, enhancement, bug fix, refactoring, test, docs)\n   - Check for any sensitive information that shouldn't be committed\n   - Draft a concise (1-2 sentences) commit message focusing on \"why\" rather than \"what\"\n\n3. Execute the commit:\n   - Add relevant untracked files to staging area\n   - Create the commit with proper co-authorship:\n     git commit -m \"Your commit message\n\n     Co-authored-by: factory-droid[bot] <138933559+factory-droid[bot]@users.noreply.github.com>\"\n   - Run git status to confirm the commit succeeded\n\n4. If the commit fails due to pre-commit hooks:\n   - Retry ONCE to include automated changes\n   - If it fails again, a pre-commit hook is likely preventing the commit\n   - If files were modified by the pre-commit hook, amend your commit to include them\n\nImportant notes:\n- Never update git config unless user explicitly asks\n- Never use -i flag (interactive mode not supported)\n- Don't push unless explicitly asked\n- Don't create empty commits if there are no changes\n\n# Creating pull requests\n\nIMPORTANT: When the user asks you to create a pull request, follow these steps:\n\n1. Run these commands IN PARALLEL to understand the branch state:\n   - git status (to see all untracked files)\n   - git diff (to see both staged and unstaged changes that will be committed)\n   - git log (to see recent commit messages, so that you can follow this repository's commit message style)\n\n2. Analyze ALL changes that will be included in the PR:\n   - Look at ALL commits, not just the latest one\n   - Understand the full scope of changes\n\n3. Create the PR:\n   - Create new branch if needed\n   - Use the default branch (shown in the system info) as the base branch if the user didn't explicitly specify a base branch to use\n   - Push to remote with -u flag if needed\n   - Use gh pr create if available, otherwise provide instructions\n\nImportant:\n- Never update git config unless user explicitly asks\n- Return the PR URL when done\n",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "summary": {
+                            "type": "string",
+                            "pattern": "^[A-Z]\\S*(?:\\s+\\S+){2,7}$",
+                            "description": "REQUIRED: A Sentence cased summary of what the command is about, 3-8 words long.\n\nExamples:\n- \"Print out numbers 1-100\"\n- \"Run the dev server\"\n- \"Remove legacy folders\"\n- \"Clean up lint statements in recent files\""
+                        },
+                        "command": {
+                            "type": "string",
+                            "description": "The command to execute"
+                        },
+                        "timeout": {
+                            "type": "number",
+                            "description": "Timeout in seconds (default: 60)"
+                        },
+                        "riskLevelReason": {
+                            "type": "string",
+                            "description": "REQUIRED: First, provide a concise one-sentence explanation justifying the risk level of this command.\n\nYour reason should explain WHY the command has a specific risk level, focusing on:\n- What the command modifies or accesses\n- Whether changes are reversible\n- The scope of potential impact (local vs system-wide vs remote)\n- Whether it executes untrusted code or uses elevated privileges\n\nExamples of good reasons for LOW risk commands:\n- \"This pwd command only reads the current directory without modifying any files.\"\n- \"The git status command only displays repository information without making changes.\"\n- \"This cat command only reads file contents without making any modifications.\"\n\nExamples of good reasons for MEDIUM risk commands:\n- \"This npm install command will modify node_modules but is limited to the project directory.\"\n- \"The git commit changes the working tree but can be reversed with subsequent git commands.\"\n- \"This mkdir command creates a new directory but doesn't affect existing files.\"\n\nExamples of good reasons for HIGH risk commands:\n- \"This sudo rm -rf command can permanently delete files with elevated privileges.\"\n- \"The curl | bash pattern executes untrusted code directly from the internet.\"\n- \"This git push command modifies the remote repository, which could affect other developers and CI/CD pipelines.\"\n- \"This git push --force command can overwrite remote repository history.\""
+                        },
+                        "riskLevel": {
+                            "type": "string",
+                            "enum": [
+                                "low",
+                                "medium",
+                                "high"
+                            ],
+                            "description": "REQUIRED: Based on your reasoning above, choose the appropriate risk level for this command. Choose from the following guidelines:\n\n# LOW RISK\nCommands that are strictly read-only operations with no side effects and very unlikely to have severe or irreversible consequences.\nExamples:\n- Display commands: echo, pwd\n- Information gathering: whoami, date, uname, ps, top\n- Reading files or logs: cat, less, head, tail, systemctl status\n- Git read operations: git status, git log, git diff\n- Directory listing: ls, find (without -delete or -exec)\n\nNote: Commands that create, modify, or delete files should be classified as MEDIUM or HIGH risk, not LOW risk.\n\nExamples for low risk commands:\n- riskLevelReason: \"This pwd command only reads the current directory without modifying any files.\", riskLevel: \"low\"\n- riskLevelReason: \"The git status command only displays repository information without making changes.\", riskLevel: \"low\"\n- riskLevelReason: \"This cat command only reads file contents without making any modifications.\", riskLevel: \"low\"\n\n# MEDIUM RISK\nCommands that may have significant side effects, but these side effects are typically harmless and straightforward to recover from.\nExamples:\n- File creation/modification in non-system directories: touch, mkdir, mv, cp\n- Installing packages from trusted sources: npm install, pip install (without sudo)\n- Network requests to trusted endpoints: curl, wget to known APIs\n- Git operations that modify local repositories: git commit, git checkout, git pull (but not git push)\n- Building code with tools like make, npm run build, mvn compile\n\nExamples for medium risk commands:\n- riskLevelReason: \"This npm install command will modify node_modules but is limited to the project directory.\", riskLevel: \"medium\"\n- riskLevelReason: \"The git commit changes the working tree but can be reversed with subsequent git commands.\", riskLevel: \"medium\"\n\n# HIGH RISK\nCommands that may have security implications such as data transfers between untrusted sources or execution of unknown code, or major side effects such as irreversible data loss or modifications of production systems/deployments.\nExamples:\n- Any command with sudo or elevated privileges that can modify system files or configurations\n- Commands that delete many files or directories: rm -rf, find ... -delete\n- Running arbitrary/untrusted code: curl | bash, eval, executing downloaded scripts\n- Exposing ports or modifying firewall rules that could allow external access\n- Git push operations that modify remote repositories: git push, git push --force\n- Irreversible actions to production deployments, database migrations, or other sensitive operations\n- Commands that access or modify sensitive information like passwords or keys\n\nExamples for high risk commands:\n- riskLevelReason: \"This sudo rm -rf command can permanently delete files with elevated privileges.\", riskLevel: \"high\"\n- riskLevelReason: \"The curl | bash pattern executes untrusted code directly from the internet.\", riskLevel: \"high\"\n- riskLevelReason: \"This git push command modifies the remote repository, which could affect other developers and CI/CD pipelines.\", riskLevel: \"high\"\n- riskLevelReason: \"This git push --force command can overwrite remote repository history.\", riskLevel: \"high\""
+                        },
+                        "fireAndForget": {
+                            "type": "boolean",
+                            "description": "Run command in background without waiting for completion. After start, note the printed PID and temp log path, run `sleep <seconds>` and Read that file to inspect output, and stop the process later with `kill <pid>`."
+                        }
+                    },
+                    "required": [
+                        "summary",
+                        "command"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Edit",
+                "description": "\nEdit the contents of a file by finding and replacing text.\n\nMake sure the Read tool was called first before making edits, as this tool requires the file to be read first.\nPreserve the exact indentation (tabs or spaces).\nNever write a new file with this tool; prefer using Create tool for that.\n'old_str' must be unique in the file, or 'change_all' must be true to replace all occurrences (for example, it's useful for variable renaming).\nmake sure to provide the larger 'old_str' with more surrounding context to narrow down the exact match.\n",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "The path to the file to edit"
+                        },
+                        "old_str": {
+                            "type": "string",
+                            "description": "The exact text to find and replace in the file"
+                        },
+                        "new_str": {
+                            "type": "string",
+                            "description": "The text to replace the old_str with"
+                        },
+                        "change_all": {
+                            "type": "boolean",
+                            "description": "Whether to replace all occurrences (true) or just the first one (false). Defaults to false."
+                        }
+                    },
+                    "required": [
+                        "file_path",
+                        "old_str",
+                        "new_str"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Grep",
+                "description": "High-performance file content search using ripgrep. Wrapper around ripgrep with comprehensive parameter support.\n\nSupports ripgrep parameters:\n- Pattern matching with regex support\n- File type filtering (--type js, --type py, etc.)\n- Glob pattern filtering (--glob \"*.js\")\n- Case-insensitive search (-i)\n- Context lines (-A, -B, -C for after/before/around context)\n- Line numbers (-n)\n- Multiline mode (-U --multiline-dotall)\n- Custom search directories\n\nOutput modes:\n- file_paths: Returns only matching file paths (default, fast)\n- content: Returns matching lines with optional context, line numbers, and formatting\n\nPERFORMANCE TIP: When exploring codebases or searching for patterns, make multiple speculative Grep tool calls in a single response to speed up the discovery phase. For example, search for different patterns, file types, or directories simultaneously.\n\nReturns search results based on the selected output mode.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {
+                            "type": "string",
+                            "description": "A search pattern to match in file contents. Can be a literal string or a regular expression. Supports ripgrep regex syntax."
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute path to a file or directory to search in. If not specified, searches in the current working directory."
+                        },
+                        "glob_pattern": {
+                            "type": "string",
+                            "description": "Glob pattern to filter files. Example: \"*.js\" for JavaScript files, \"**/*.tsx\" for React components. Maps to ripgrep --glob parameter."
+                        },
+                        "output_mode": {
+                            "type": "string",
+                            "enum": [
+                                "file_paths",
+                                "content"
+                            ],
+                            "description": "Output format: \"file_paths\" returns only matching file paths, \"content\" returns matching lines with context. Content mode supports -A/-B/-C context, -n line numbers, head_limit."
+                        },
+                        "case_insensitive": {
+                            "type": "boolean",
+                            "description": "Perform case-insensitive matching (ripgrep -i flag)."
+                        },
+                        "type": {
+                            "type": "string",
+                            "description": "Ripgrep file type filter for common file types (ripgrep --type flag). Examples: \"js\" for JavaScript, \"py\" for Python, \"rust\" for Rust, \"cpp\" for C++."
+                        },
+                        "context_before": {
+                            "type": "number",
+                            "description": "Number of lines to show before each match (ripgrep -B flag). Only works with output_mode=\"content\"."
+                        },
+                        "context_after": {
+                            "type": "number",
+                            "description": "Number of lines to show after each match (ripgrep -A flag). Only works with output_mode=\"content\"."
+                        },
+                        "context": {
+                            "type": "number",
+                            "description": "Number of lines to show before and after each match (ripgrep -C flag). Only works with output_mode=\"content\"."
+                        },
+                        "line_numbers": {
+                            "type": "boolean",
+                            "description": "Show line numbers in output (ripgrep -n flag). Only works with output_mode=\"content\"."
+                        },
+                        "head_limit": {
+                            "type": "number",
+                            "description": "Limit output to first N lines/entries. Works with both output modes."
+                        },
+                        "multiline": {
+                            "type": "boolean",
+                            "description": "Enable multiline mode where . matches newlines and patterns can span lines (ripgrep -U --multiline-dotall)."
+                        },
+                        "fixed_string": {
+                            "type": "boolean",
+                            "description": "Treat the pattern as a literal string instead of a regular expression (ripgrep -F flag). Useful for searching special characters like ?, *, etc."
+                        }
+                    },
+                    "required": [
+                        "pattern"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Glob",
+                "description": "Advanced file path search using glob patterns with multiple pattern support and exclusions.\nUses ripgrep for high-performance file pattern matching.\nSupports:\n- Multiple inclusion patterns (OR logic)\n- Exclusion patterns to filter out unwanted files\nCommon patterns:\n- \"*.ext\" - all files with extension\n- \"**/*.ext\" - all files with extension in any subdirectory\n- \"dir/**/*\" - all files under directory\n- \"{*.js,*.ts}\" - multiple extensions\n- \"!node_modules/**\" - exclude pattern\n\nPERFORMANCE TIP: When exploring codebases or discovering files for a task, make multiple speculative Glob tool calls in a single response to speed up the discovery phase. For example, search for different file types or directories that might be relevant to your task simultaneously.\n\nReturns a list of matched file paths.\n\nNever use 'glob' cli command directly via Execute tool, use this Glob tool instead. It's optimized for performance and handles multiple patterns and exclusions.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "patterns": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            ],
+                            "description": "A glob pattern string or array of glob patterns to match file paths. Examples: \"*.js\", [\"*.js\", \"*.ts\"] for JavaScript and TypeScript files, [\"src/**/*.tsx\"] for React components in src, [\"**/*.test.*\"] for all test files."
+                        },
+                        "excludePatterns": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            ],
+                            "description": "A glob pattern string or array of glob patterns to exclude from results. Example: \"node_modules/**\", [\"node_modules/**\", \"dist/**\", \"*.min.js\"]"
+                        },
+                        "folder": {
+                            "type": "string",
+                            "description": "Absolute path to the directory to search in. If not specified, searches in the current working directory."
+                        }
+                    },
+                    "required": [
+                        "patterns"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Create",
+                "description": "Creates a new file on the file system with the specified content. Prefer editing existing files, unless you need to create a new file.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "The path to the file for the new file."
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "The content to write to the file"
+                        }
+                    },
+                    "required": [
+                        "file_path",
+                        "content"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "ExitSpecMode",
+                "description": "Use this tool only when you are in spec mode and have finished crafting a concrete implementation plan that the user needs to review before you start coding. The primary purpose of this tool is to present that plan, get explicit approval, and then exit spec mode so you can begin implementation.\n\n  Before calling this tool: if requirements are ambiguous or key decisions are missing, first call the AskUser tool to ask focused questions and incorporate the answers into your plan.\n\n  If relevant, include minimal key code snippets in your spec to illustrate your approach.\n\n  When NOT to use this tool:\n  • Pure research / investigation tasks (e.g., \"Search for and understand the implementation of vim mode\") where you are not yet proposing implementation steps.\n  • Situations where you are still gathering context or the task does not require coding work.\n  • If the system message \"Spec mode is active\" is **NOT** present.\n\n  Example 1: Task = \"Search for and understand the implementation of vim mode\" → stay in spec mode, do not call this tool.\n  Example 2: Task = \"Help me implement yank mode for vim\" → once your implementation plan is ready, call this tool to present it before coding.\n\n  Important:\n  When there are several equally strong alternatives to approach the problem, please list them in your specification and make sure to use 'optionNames' arguments to provide the alternatives names, so user can pick the one they prefer!\n  ",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Optional spec title to use when saving the spec."
+                        },
+                        "plan": {
+                            "type": "string",
+                            "description": "The plan you came up with, that you want to run by the user for approval. Supports markdown. The plan should be pretty concise."
+                        },
+                        "optionNames": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Optional list of proposal option labels the agent is offering (e.g. [\"Option A\", \"Option B\"]). If present with 2+ items, the user will be asked to choose which option to proceed with."
+                        }
+                    },
+                    "required": [
+                        "plan"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "AskUser",
+                "description": "Use this tool when you need to ask the user 1–4 quick multiple-choice questions at once during execution to clarify requirements or decisions.\n\nImportant:\n- Keep the questionnaire short and focused.\n- The tool can be used more than once if there are important questions that needs to be asked\n- User has an option to provide own custom answers, if they don't like suggested ones.\n- If you haven't already explained the context and trade-offs of the options before invoking this tool, you MUST include that context in the [question] text itself so the user understands what they're choosing and why it matters. Keep option labels short, but make the question descriptive enough to stand on its own.\n",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "questionnaire": {
+                            "type": "string",
+                            "description": "A plain-text questionnaire to ask the user. Use this format (no headers or code fences):\n\n1. [question] Which features do you want to enable?\n[topic] Features\n[option] Auth handling\n[option] Login Page\n\n2. [question] Which library should we use for date formatting?\n[topic] Library\n[option] Library ABC\n[option] Library BlaBla\n\nNotes:\n- 1–4 questions\n- 2–4 options per question\n- [topic] is a short label for the UI navigation bar; multi-word topics will be normalized (e.g., \"My Topic\" → \"My-Topic\")\n- Do NOT include an 'Own answer' option; the UI provides it automatically\n- Keep option labels short and mutually exclusive\n"
+                        }
+                    },
+                    "required": [
+                        "questionnaire"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "WebSearch",
+                "description": "Performs a web search to find relevant web pages and documents to the input query. Has options to filter by domains and request full-page text. Do not assume category or search type filters are available. Use this tool ONLY when the query requires finding specific factual information that would benefit from accessing current web content, such as:\n      - Recent news, events, or developments\n      - Up-to-date statistics, data points, or facts\n      - Information about public entities (companies, organizations, people)\n      - Specific published content, articles, or references\n      - Current trends or technologies\n      - API documents for a publicly available API\n      - Public github repositories, and other public code resources\n    DO NOT use for:\n      - Creative generation (writing, poetry, etc.)\n      - Mathematical calculations or problem-solving\n      - Code generation or debugging unrelated to web resources\n      - Finding code files in a repository in factory\n\n    IMPORTANT - Use the correct year in search queries:\n      - Today's date is 2026-05-05. You MUST use this year when searching for recent information, documentation, or current events.\n      - Example: If today is 2025-07-15 and the user asks for \"latest React docs\", search for \"React documentation 2025\", NOT \"React documentation 2024\"\n    ",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query string"
+                        },
+                        "numResults": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "description": "Number of results to return (default: 10). Must be an integer (e.g., 10), not a string. 1-100 allowed. Optional field."
+                        },
+                        "includeDomains": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Array of domains to include (e.g., [\"example.com\", \"developer.mozilla.org\"]). Must be an array of strings. IMPORTANT: Only one of includeDomains or excludeDomains should be used, not both. Optional field."
+                        },
+                        "excludeDomains": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Array of domains to exclude (e.g., [\"spam.com\"]). Optional; should almost never be used. IMPORTANT: Only one of includeDomains or excludeDomains should be used, not both. Optional field."
+                        },
+                        "text": {
+                            "type": "boolean",
+                            "description": "Whether to include full text content in results. Boolean true/false, not a string."
+                        }
+                    },
+                    "required": [
+                        "query"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "TodoWrite",
+                "description": "Use this tool to draft and maintain a structured todo list for the current coding session. It helps you organize multi‑step work, make progress visible, and keep the user informed about status and overall advancement.\n\n## Limits\n- Maximum 50 todo items\n- Maximum 500 characters per todo item\n\n## Input Format\nProvide todos as a numbered multi-line string with status markers:\n\n```\n1. [completed] First task that is done\n2. [in_progress] Currently working on this\n3. [pending] Not started yet\n```\n\nStatus markers: `[completed]`, `[in_progress]`, `[pending]`\nNumbers are for readability only; item order is determined by line position.\n\n## PERFORMANCE TIP\nCall TodoWrite IN PARALLEL with other tools to save time and tokens. When starting work on a task, create/update todos simultaneously with your first exploration tools (Read, Grep, LS, etc.). Don't wait to finish reading files before creating your todo list - do both at once. This parallelization significantly improves response time.\n\nExamples of parallel execution:\n- Creating initial todo list WHILE searching for relevant files with Grep/Glob\n- Updating todo status to in_progress WHILE reading the file you're about to edit\n\n## When to Use This Tool\n\nUse this tool proactively when:\n1. Complex multi‑step work — requires 3 or more distinct actions i.e. at least 3 tool calls (not just 3 logical steps in one command)\n2. Non‑trivial work — requires deliberate planning or multiple operations\n3. The user asks for a todo list — explicit request to track via todos\n4. The user gives multiple tasks — a numbered or comma‑separated list\n5. New instructions arrive — immediately capture them as todos\n6. You begin a task — set it to in_progress BEFORE you start; keep only one in_progress at a time\n7. You finish a task — mark it completed only after verification, then add any follow‑ups discovered during implementation\n8. You are handing back control to the user — mark all completed work as such before responding\n\n## When NOT to Use This Tool\nSkip it when:\n1. There’s a single, straightforward task\n2. The work is trivial and tracking adds no value\n3. It can be done in fewer than 3 trivial steps. If a task needs 1-2 tool calls altogether, skip TodoWrite.\n4. The request is purely conversational or informational\n5. Do NOT create todos based on system context, environment outputs, or your interpretation of what might need doing, only user's explicitly given tasks.\nNOTE: If there’s only one trivial task, do it directly rather than creating a list.\n\n## Examples of When to Use the Todo List\n<example>\nUser: I want to add a dark mode toggle to the application settings. Make sure you run the tests and build when you're done!\nAssistant: I’ll add a dark mode toggle. I’ll create a todo list to track this.\n*Creates todos:*\n1. Add dark mode toggle on Settings page\n2. Add dark mode state management (context/store)\n3. Implement CSS‑in‑JS styles for dark theme\n4. Update components to support theme switching\n5. Run tests and build; fix any failures\n*Begins task 1*\n<reasoning>\nWhy a todo list:\n1. Multi‑step feature: UI, state, styling\n2. The user explicitly asked to run tests/build afterward\n3. The assistant added an “Ensure tests/build succeed” step to reflect the requirement\n</reasoning>\n</example>\n\n<example>\nUser: Help me rename getCwd to getCurrentWorkingDirectory across my project\nAssistant: I’ll first search for all occurrences of getCwd.\n*Searches/greps the repo*\nAssistant: Found 15 occurrences across 8 files. I’ll create todos to track these edits.\n*Creates items per file to update*\n<reasoning>\nWhy a todo list:\n1. Initial search clarified scope\n2. Multiple files/occurrences make this a multi‑step task\n3. Todos ensure each location is updated systematically\n4. Prevents misses and preserves consistency\n</reasoning>\n</example>\n\n<example>\nUser: I need features for my e‑commerce site: user registration, product catalog, shopping cart, checkout flow.\nAssistant: I’ll break these down into todos first.\n*Creates a list with task breakdowns for each feature per the project architecture*\nAssistant: Starting with user registration: database models, API endpoints, and frontend forms integrated with the auth system.\n<reasoning>\nWhy a todo list:\n1. Multiple complex features provided in a single list\n2. Breaks large work into actionable steps\n3. Enables tracking progress across the full implementation\n</reasoning>\n</example>\n\n<example>\nUser: Can you help optimize my React app? It renders slowly.\nAssistant: I’ll analyze the codebase for bottlenecks, then create a todo list for fixes.\n*Reviews components, render patterns, state, and data fetching*\n*Creates todos such as: 1) Memoize expensive calcs in ProductList, 2) Virtualize long lists in Dashboard, 3) Optimize image loading in Gallery, 4) Fix state update loops in ShoppingCart, 5) Review bundle size and add code splitting*\nLet’s start with memoization in ProductList.\n<reasoning>\nWhy a todo list:\n1. Analysis reveals multiple optimization opportunities\n2. Perf work is non‑trivial and multi‑step\n3. Todos help methodically improve several components\n4. Ensures all bottlenecks get addressed\n</reasoning>\n</example>\n\n## Examples of When NOT to Use the Todo List\n<example>\nUser: How do I print 'Hello World' in Python?\nAssistant: Use:\npython\nprint(\"Hello World\")\nThis prints the line to the console.\n<reasoning>\nNo todo list: a single trivial step with no need for tracking.\n</reasoning>\n</example>\n\n<example>\nUser: What does git status do?\nAssistant: It shows the working directory and staging area state, including staged/unstaged changes and untracked files. Useful before commits.\n<reasoning>\nNo todo list: informational only, not a multi‑step coding task.\n</reasoning>\n</example>\n\n<example>\nUser: Add a comment to calculateTotal explaining what it does.\nAssistant: Sure — I’ll add the comment now.\n* Uses the Edit tool to add the comment *\n<reasoning>\nNo todo list: a single, focused edit in one place.\n</reasoning>\n</example>\n\n<example>\nUser: Run npm install and report the result.\nAssistant: Running npm install…\n*Executes: npm install*\nCompleted successfully. All dependencies installed per package.json.\n<reasoning>\nNo todo list: one command with immediate output; no steps to organize.\n</reasoning>\n</example>\n\n<example>\nUser: First run \"npm run lint:fix\", then execute \"pytest tests/ -v --cov=src\", and finally \"docker build -t myapp:latest .\"\nAssistant: I'll track these exact commands and start working on them.\n*IN PARALLEL: Creates todos AND starts executing first command*\nTodos:\n1. Run: npm run lint:fix\n2. Run: pytest tests/ -v --cov=src\n3. Run: docker build -t myapp:latest .\n<reasoning>\nWhy this approach:\n1. TodoWrite called simultaneously with Execute tool for first command, since this requires at least 3 tool calls.\n2. [IMPORTANT] We need to preserve the exact commands as given by user with all flags and arguments\n3. Parallel execution saves time vs sequential todo→execute pattern\n4. User's specific instructions captured verbatim for accurate execution\n</reasoning>\n</example>\n\n## Task States and Management\n1. Task states:\n   - pending: not started\n   - in_progress: currently working (limit to ONE at a time)\n   - completed: finished\n2. Task management:\n   - Update status in real time while working\n   - Mark items completed IMMEDIATELY after finishing (don’t batch)\n   - Mark items completed ONLY after you've actually performed the work (executed tools, made changes). Never mark completed based on plans or intentions.\n   - Keep only ONE in_progress at any moment\n   - Finish current work before starting another\n   - Remove items that become irrelevant\n   - When calling TodoWrite in parallel with action tools, mark the first item in_progress - parallel execution means work has started.\n   - Keep exactly ONE in_progress item when actively working.\n3. Completion rules:\n   - Mark completed ONLY when FULLY done and verified.\n   - Update immediately after finishing each item.\n   - If errors/blockers remain, keep it in_progress\n   - When blocked, add a new task describing the blocker/resolution\n   - Never mark completed if:\n     - Tests fail\n     - Implementation is partial\n     - Errors are unresolved\n     - Required files/dependencies are missing\n4. Task breakdown:\n   - Write specific, actionable items\n   - Split complex work into smaller steps\n   - Use clear, descriptive names\n   - **Preserve exact user instructions**: When users provide specific commands or steps, capture them verbatim\n   - Include CLI commands exactly as given (e.g., \"Run: npm test --coverage --watch=false\")\n   - Maintain user-specified flags, arguments, and order of operations\n\n**CRITICAL**: If your todo list has ANY [pending] items, you MUST have EXACTLY ONE [in_progress] item. When all work is complete and only a \"waiting for user\" item remains, mark it [in_progress] (not [pending]), or remove the todo list entirely.\n\nWhen uncertain, err on the side of using this tool. Proactive task tracking shows diligence and helps ensure all requirements are met.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "todos": {
+                            "type": "string",
+                            "description": "The updated todo list"
+                        }
+                    },
+                    "required": [
+                        "todos"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "FetchUrl",
+                "description": "Scrapes content from URLs that the user provided, and returns the contents in markdown format. This tool supports both generic webpages and specific integration URLs.\n\nCRITICAL: BEFORE CALLING THIS TOOL, CHECK IF THE URL WILL FAIL\n\nURLs THAT WILL ALWAYS FAIL - DO NOT ATTEMPT TO FETCH:\n\n1. LOCAL/PRIVATE NETWORK URLs:\n   - http://localhost:* (any port)\n   - http://127.0.0.1:* or http://[::1]:*\n   - http://0.0.0.0:*\n   - http://10.*.*.* (private network)\n   - http://172.16-31.*.* (private network)\n   - http://192.168.*.* (private network)\n   - http://169.254.*.* (link-local)\n   - *.local, *.internal domains\n   - http://*.lvh.me:* (localhost aliases)\n\n2. NON-HTTP PROTOCOLS:\n   - file:/// (local file system)\n   - ssh://, ftp://, powershell://\n   - view-source: (browser-specific)\n\n3. CORPORATE/INTERNAL INFRASTRUCTURE:\n   - *.corp.{company}.com (corporate networks)\n   - Internal staging/production systems (e.g., productioncore.clari.io, gateway-staging.clari.com)\n   - Internal dashboards (e.g., goldilocks.*.clari.io)\n   - Private Git servers (e.g., git.corp.adobe.com, code.byted.org)\n   - Custom ports on private domains (e.g., hisglobal.net:2226)\n\n4. INVALID/BROKEN URL PATTERNS:\n   - GitHub pull/new/* (these are creation URLs, not viewable content)\n   - URLs with session tokens or temporary parameters\n   - Malformed URLs with invalid characters\n   - API endpoints expecting POST/PUT/DELETE requests\n\nVALIDATION CHECKLIST - Only proceed if ALL are true:\n- URL uses http:// or https:// protocol\n- URL doesn't contain localhost, 127.0.0.1, or private IP ranges\n- URL was explicitly provided by the user\n\nSUPPORTED INTEGRATION URLS (requires setup at https://app.factory.ai/settings/integrations):\n- Google Docs: docs.google.com/document/d/{doc-id}\n- Notion Pages: notion.so/{workspace}/{page-id}\n- Linear Issues: linear.app/{workspace}/issue/{id}\n- GitHub Pull Requests: github.com/{owner}/{repo}/pull/{number}\n- GitHub Issues: github.com/{owner}/{repo}/issues/{number}\n- GitHub Workflow Runs: github.com/{owner}/{repo}/actions/runs/{id}\n- Sentry Issues: {org}.sentry.io/issues/{id}\n- GitLab Merge Requests: gitlab.com/{group}/{project}/-/merge_requests/{number}\n- Jira Tickets: {instance}.atlassian.net/browse/{key} or custom Jira domains\n- PagerDuty Incidents: {subdomain}.pagerduty.com/incidents/{id}\n- Slack Thread URLs: {workspace}.slack.com/archives/{channel}/p{timestamp}\n\nPERFORMANCE TIP: When the user provides multiple URLs, make parallel FetchUrl calls in a single response.\n\nNOTE: For Factory wiki URLs (app.factory.ai/wiki/...), use the browse-wiki skill instead of this tool.\n\nDO NOT use this tool for:\n- URLs not explicitly provided by the user\n- Web searching (use web_search tool instead)\n- Any URL matching the failure patterns above",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "format": "uri",
+                            "description": "The URL to scrape content from"
+                        }
+                    },
+                    "required": [
+                        "url"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "GenerateDroid",
+                "description": "Generate a custom droid configuration based on your description using AI",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "description": {
+                            "type": "string",
+                            "minLength": 10,
+                            "description": "Comprehensive description of what this droid should do and when it should be used"
+                        },
+                        "location": {
+                            "type": "string",
+                            "enum": [
+                                "project",
+                                "personal"
+                            ],
+                            "description": "Where to save the droid: project (.factory/droids) or personal (~/.factory/droids)"
+                        }
+                    },
+                    "required": [
+                        "description"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Skill",
+                "description": "Execute a skill within the main conversation\n\n<skills_instructions>\nWhen users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.\n\nHow to use skills:\n- Invoke skills using this tool with the skill name only (no arguments)\n- The skill's prompt will expand and provide detailed instructions on how to complete the task\n- Only use skills listed in <available_skills> below\n- Do not invoke a skill that is already running\n</skills_instructions>\n\n<available_skills>\n<skill>\n<name>agent-browser</name>\n<description>Automates browsers and Electron desktop apps (VS Code, Slack, Discord, Figma, Notion, Spotify, etc.) for testing, form filling, screenshots, and data extraction. Use when the user needs to navigate, interact with, test, or extract data from any website or Electron desktop app. (personal)</description>\n</skill>\n<skill>\n<name>tuistory</name>\n<description>Automates terminal user interface (TUI) testing. Use when you need to launch, interact with, test, or debug terminal applications, capture TUI snapshots, or automate terminal inputs. (personal)</description>\n</skill>\n<skill>\n<name>figma-mcp-promotion</name>\n<description>Promote and assist with Figma MCP integration. ACTIVATE when the user shares a Figma URL (figma.com), mentions Figma designs or components, shares PNG images that may originate from Figma, or when Figma MCP tools are already connected and being used. Handles installation encouragement, conversational promotion, and push-back-to-Figma flows. (personal)</description>\n</skill>\n<skill>\n<name>install-code-review</name>\n<description>Install and configure Factory Droid for automated code review on GitHub or GitLab. Supports single-repo setup or org/group-wide rollout across hundreds of repos. Use when a user wants to set up Droid review on their repositories.\n (personal)</description>\n</skill>\n<skill>\n<name>review</name>\n<description>Review code changes and identify high-confidence, actionable bugs. Use when the user wants to:\n- Review a pull request or branch diff\n- Find bugs, security issues, or correctness problems in code changes\n- Get a structured summary of review findings\n (personal)</description>\n</skill>\n<skill>\n<name>simplify</name>\n<description>Review changed code for reuse, quality, and efficiency, then fix any issues found. (personal)</description>\n</skill>\n<skill>\n<name>session-navigation</name>\n<description>Navigate, search, and manage Droid sessions. Use when the user wants to:\n- List recent sessions\n- Search session history for specific topics or patterns\n- Resume a previous session\n- Get details about what was accomplished in a session\n- Find sessions by project, date, or content\n (personal)</description>\n</skill>\n<skill>\n<name>install-qa</name>\n<description>Set up automated QA testing for this project. Performs deep codebase analysis, asks targeted questions, and generates a modular QA skill with sub-skills per app, a GitHub Actions workflow, and a report template. This is a complex, multi-phase process -- quality assurance is foundational and we take the time to get it right.\n (personal)</description>\n</skill>\n<skill>\n<name>security-review</name>\n<description>Security-focused code review using STRIDE, OWASP Top 10, OWASP LLM Top 10, and supply chain analysis. Use when:\n- Reviewing a PR for security vulnerabilities\n- Performing a security audit of code changes\n- Identifying injection, auth, data exposure, and other security issues\n- Running a full-project security audit reviewing every source file\n (personal)</description>\n</skill>\n<skill>\n<name>wiki</name>\n<description>Generate comprehensive codebase documentation for a repository.\nUploads the wiki to view in the Factory app.\n (personal)</description>\n</skill>\n<skill>\n<name>install-wiki</name>\n<description>Install a CI action that automatically refreshes the Factory Wiki on each push to the default branch.\nUse when the user wants to set up automated wiki generation, install wiki CI, or configure wiki refresh.\n (personal)</description>\n</skill>\n<skill>\n<name>browse-wiki</name>\n<description>Search and read wiki documentation for a repository (personal)</description>\n</skill>\n<skill>\n<name>ui-ux-pro-max</name>\n<description>UI/UX design intelligence. 67 styles, 96 palettes, 57 font pairings, 25 charts, 13 stacks (React, Next.js, Vue, Svelte, SwiftUI, React Native, Flutter, Tailwind, shadcn/ui). Actions: plan, build, create, design, implement, review, fix, improve, optimize, enhance, refactor, check UI/UX code. Projects: website, landing page, dashboard, admin panel, e-commerce, SaaS, portfolio, blog, mobile app, .html, .tsx, .vue, .svelte. Elements: button, modal, navbar, sidebar, card, table, form, chart. Styles: glassmorphism, claymorphism, minimalism, brutalism, neumorphism, bento grid, dark mode, responsive, skeuomorphism, flat design. Topics: color palette, accessibility, animation, layout, typography, font pairing, spacing, hover, shadow, gradient. Integrations: shadcn/ui MCP for component search and examples. (project)</description>\n</skill>\n<skill>\n<name>writing-skills</name>\n<description>Use when creating new skills, editing existing skills, or verifying skills work before deployment (project)</description>\n</skill>\n<skill>\n<name>prompt-leverage</name>\n<description>Strengthen a raw user prompt into an execution-ready instruction set for Amp, Claude Code, or another AI agent. Use when the user wants to improve an existing prompt, build a reusable prompting framework, wrap the current request with better structure, add clearer tool rules, or create a hook that upgrades prompts before execution. (project)</description>\n</skill>\n<skill>\n<name>frontend-skill</name>\n<description>Use when the task asks for a visually strong landing page, website, app, prototype, demo, or game UI. This skill enforces restrained composition, image-led hierarchy, cohesive content structure, and tasteful motion while avoiding generic cards, weak branding, and UI clutter. (project)</description>\n</skill>\n<skill>\n<name>using-git-worktrees</name>\n<description>Use when starting feature work that needs isolation from current workspace or before executing implementation plans - creates isolated git worktrees with smart directory selection and safety verification (project)</description>\n</skill>\n<skill>\n<name>database-migrations</name>\n<description>Database migration best practices for schema changes, data migrations, rollbacks, and zero-downtime deployments across PostgreSQL, MySQL, and common ORMs (Prisma, Drizzle, Kysely, Django, TypeORM, golang-migrate). (project)</description>\n</skill>\n<skill>\n<name>requesting-code-review</name>\n<description>Use when completing tasks, implementing major features, or before merging to verify work meets requirements (project)</description>\n</skill>\n<skill>\n<name>release-drafter</name>\n<description>Configure, customize, and troubleshoot Release Drafter v6 for GitHub repositories. Use when setting up `.github/workflows/release-drafter.yml`, authoring `.github/release-drafter.yml`, enabling autolabeling, defining categories/versioning rules, handling prerelease flows, or debugging why draft release notes are missing or incorrect. (project)</description>\n</skill>\n<skill>\n<name>systematic-debugging</name>\n<description>Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes (project)</description>\n</skill>\n<skill>\n<name>shadcn-best-practices</name>\n<description>Manages shadcn components and projects — adding, searching, fixing, debugging, styling, and composing UI. Provides project context, component docs, and usage examples. Applies when working with shadcn/ui, component registries, presets, --preset codes, or any project with a components.json file. Also triggers for \"shadcn init\", \"create an app with --preset\", or \"switch to --preset\". (project)</description>\n</skill>\n<skill>\n<name>docker-patterns</name>\n<description>Docker and Docker Compose patterns for local development, container security, networking, volume strategies, and multi-service orchestration. (project)</description>\n</skill>\n<skill>\n<name>postgres-patterns</name>\n<description>PostgreSQL database patterns for query optimization, schema design, indexing, and security. Based on Supabase best practices. (project)</description>\n</skill>\n<skill>\n<name>executing-plans</name>\n<description>Use when you have a written implementation plan to execute in a separate session with review checkpoints (project)</description>\n</skill>\n<skill>\n<name>receiving-code-review</name>\n<description>Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation (project)</description>\n</skill>\n<skill>\n<name>git-commit</name>\n<description>Execute git commit with conventional commit message analysis, intelligent staging, and message generation. Use when user asks to commit changes, create a git commit, or mentions \"/commit\". Supports: (1) Auto-detecting type and scope from changes, (2) Generating conventional commit messages from diff, (3) Interactive commit with optional type/scope/description overrides, (4) Intelligent file staging for logical grouping (project)</description>\n</skill>\n<skill>\n<name>react-best-practices</name>\n<description>React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns. Triggers on tasks involving React components, Next.js pages, data fetching, bundle optimization, or performance improvements. (project)</description>\n</skill>\n<skill>\n<name>finishing-a-development-branch</name>\n<description>Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup (project)</description>\n</skill>\n<skill>\n<name>context7-cli</name>\n<description>Use the ctx7 CLI to fetch library documentation, manage AI coding skills, and configure Context7 MCP. Activate when the user mentions \"ctx7\" or \"context7\", needs current docs for any library, wants to install/search/generate skills, or needs to set up Context7 for their AI coding agent. (project)</description>\n</skill>\n<skill>\n<name>web-design-guidelines</name>\n<description>Review UI code for Web Interface Guidelines compliance. Use when asked to \"review my UI\", \"check accessibility\", \"audit design\", \"review UX\", or \"check my site against best practices\". (project)</description>\n</skill>\n<skill>\n<name>frontend-development</name>\n<description>Build React/TypeScript frontends with modern patterns. Use for components, Suspense, lazy loading, useSuspenseQuery, MUI v7 styling, TanStack Router, performance optimization. (project)</description>\n</skill>\n<skill>\n<name>writing-plans</name>\n<description>Use when you have a spec or requirements for a multi-step task, before touching code (project)</description>\n</skill>\n<skill>\n<name>agent-md-refactor</name>\n<description>Refactor bloated AGENTS.md, CLAUDE.md, or similar agent instruction files to follow progressive disclosure principles. Splits monolithic files into organized, linked documentation. (project)</description>\n</skill>\n<skill>\n<name>coding-standards</name>\n<description>Universal coding standards, best practices, and patterns for TypeScript, JavaScript, React, and Node.js development. (project)</description>\n</skill>\n<skill>\n<name>brainstorming</name>\n<description>You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation. (project)</description>\n</skill>\n<skill>\n<name>vercel-composition-patterns</name>\n<description>React composition patterns that scale. Use when refactoring components with boolean prop proliferation, building flexible component libraries, or designing reusable APIs. Triggers on tasks involving compound components, render props, context providers, or component architecture. Includes React 19 API changes. (project)</description>\n</skill>\n<skill>\n<name>hibiken-asynq-setup</name>\n<description>Initial setup and configuration for hibiken/asynq distributed task queue in Go. Use when setting up Redis broker connections, configuring workers and queues, implementing task handlers, or structuring asynq projects. Covers basic single-service architecture patterns. (project)</description>\n</skill>\n<skill>\n<name>golang-testing</name>\n<description>Go testing patterns including table-driven tests, subtests, benchmarks, fuzzing, and test coverage. Follows TDD methodology with idiomatic Go practices. (project)</description>\n</skill>\n<skill>\n<name>golang-patterns</name>\n<description>Idiomatic Go patterns, best practices, and conventions for building robust, efficient, and maintainable Go applications. (project)</description>\n</skill>\n<skill>\n<name>dispatching-parallel-agents</name>\n<description>Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies (project)</description>\n</skill>\n<skill>\n<name>api-design</name>\n<description>REST API design patterns including resource naming, status codes, pagination, filtering, error responses, versioning, and rate limiting for production APIs. (project)</description>\n</skill>\n<skill>\n<name>prd</name>\n<description>Generate high-quality Product Requirements Documents (PRDs) for software systems and AI-powered features. Includes executive summaries, user stories, technical specifications, and risk analysis. (project)</description>\n</skill>\n<skill>\n<name>using-superpowers</name>\n<description>Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions (project)</description>\n</skill>\n<skill>\n<name>pragmatic-principles</name>\n<description>Use when reviewing or implementing code where there is risk of over-engineering, unclear abstractions, or duplication. Apply pragmatic YAGNI, KISS, and DRY checks to keep changes simple, maintainable, and aligned with current requirements. (project)</description>\n</skill>\n<skill>\n<name>ui-styling</name>\n<description>Create beautiful, accessible user interfaces with shadcn/ui components (built on Radix UI + Tailwind), Tailwind CSS utility-first styling, and canvas-based visual designs. Use when building user interfaces, implementing design systems, creating responsive layouts, adding accessible components (dialogs, dropdowns, forms, tables), customizing themes and colors, implementing dark mode, generating visual designs and posters, or establishing consistent styling patterns across applications. (project)</description>\n</skill>\n<skill>\n<name>verification-before-completion</name>\n<description>Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always (project)</description>\n</skill>\n<skill>\n<name>go-api-project-structure</name>\n<description>Use when starting a new Go backend API project or restructuring an existing service into a clean, framework-agnostic layered architecture with clear folder responsibilities and dependency boundaries. (project)</description>\n</skill>\n<skill>\n<name>code-reviewer</name>\n<description>Use when reviewing completed implementation work, validating a finished task or plan step, comparing code against requirements or intended architecture, checking whether a change is complete and appropriately scoped, or performing a PR-style review that should distinguish blockers from follow-up improvements. (project)</description>\n</skill>\n<skill>\n<name>golang-pro</name>\n<description>Use when building or reviewing Go services that need idiomatic design, robust concurrency, strong error handling, and production-ready performance/testing patterns. (project)</description>\n</skill>\n<skill>\n<name>backend-patterns</name>\n<description>Backend architecture patterns, API design, database optimization, and server-side best practices for Node.js, Express, and Next.js API routes. (project)</description>\n</skill>\n<skill>\n<name>test-driven-development</name>\n<description>Use when implementing any feature or bugfix, before writing implementation code (project)</description>\n</skill>\n<skill>\n<name>huma-go-api</name>\n<description>Build, extend, or migrate Go HTTP APIs using Huma v2. Use when working on Huma request and response models, `huma.Register` operations, OpenAPI generation, validation, auth/error middleware, testing with `humatest`, router adapters, or when extending this repository's current Fiber + Huma transport layer. (project)</description>\n</skill>\n<skill>\n<name>subagent-driven-development</name>\n<description>Use when executing implementation plans with independent tasks in the current session (project)</description>\n</skill>\n<skill>\n<name>skill-creator</name>\n<description>Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, update or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy. (project)</description>\n</skill>\n<skill>\n<name>find-skills</name>\n<description>Helps users discover and install agent skills when they ask questions like \"how do I do X\", \"find a skill for X\", \"is there a skill that can...\", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill. (personal)</description>\n</skill>\n</available_skills>",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "skill": {
+                            "type": "string",
+                            "description": "The skill name to execute"
+                        }
+                    },
+                    "required": [
+                        "skill"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "Task",
+                "description": "Launch a new subagent (custom droid) to handle a complex, multi-step task autonomously.\n\n  Required inputs:\n  - subagent_type: the droid name/identifier (example: \"worker\"). Only invoke subagents that appear in the available list — do not guess or invent identifiers.\n  - description: a short 3–5 word label for the UI\n  - prompt: the full task to execute\n\n  Where to find available droids:\n  - ~/.factory/droids (personal)\n  - .factory/droids (project)\n\n  Capabilities:\n  - The subagent can only use the tools enabled by its droid configuration. If you need code edits, choose a droid that enables file-editing tools.\n  - Each invocation is stateless and returns a single final report (no follow-up questions).\n\n  When NOT to use the Task tool:\n  - If you want to read a specific file path, use the Read tool\n  - If you are searching for a specific class definition like \"class Foo\", use the Grep/Glob tools\n  - If you are working within 1-10 known files, use the file tools directly instead of spawning a subagent\n\n  How to write a good prompt (template):\n  1. Goal:\n  2. Context (repo paths / commands / links):\n  3. Constraints (what to avoid / must preserve):\n  4. Questions to answer or steps to take:\n  5. Expected output format (e.g. file paths + summary, patch, checklist):\n\n  Define the output shape in your prompt: tell the subagent exactly what to return and in what format. Be explicit.\n\n  Usage notes:\n  1. If you need parallel subagents, issue multiple Task tool calls in the same assistant message.\n  2. When the subagent is done, it returns a single message to you. The result is not shown to the user unless you summarize it.\n  3. Clearly tell the subagent whether you expect it to write code or only do research, and specify exactly what it should return.\n## Custom Droids Available\n\nCustom droid directories:\n• Project: /home/hiennx/Documents/portfolio-management-v2/.factory/droids\n• Personal: /home/hiennx/.factory/droids\n\nIf a relevant custom droid exists, USE IT by calling the Task tool.\n\n### Available Custom Droids:\n\n• **code-reviewer** — Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards. Examples: <example>Context: The user is creating a code-review agent that should be called after a logical chunk of code is written. user: \"I've finished implementing the user authentication system as outlined in step 3 of our plan\" assistant: \"Great work! Now let me use the code-reviewer agent to review the implementation against our plan and coding standards\" <commentary>Since a major project step has been completed, use the code-reviewer agent to validate the work against the plan and identify any issues.</commentary></example> <example>Context: User has completed a significant feature implementation. user: \"The API endpoints for the task management system are now complete - that covers step 2 from our architecture document\" assistant: \"Excellent! Let me have the code-reviewer agent examine this implementation to ensure it aligns with our plan and follows best practices\" <commentary>A numbered step from the planning document has been completed, so the code-reviewer agent should review the work.</commentary></example>\n (model: inherit, location: project)\n• **worker** — General-purpose worker droid for delegating tasks. Use for non-trivial tasks that benefit from parallel execution, such as code exploration, Q&A, research, analysis. (model: inherit, location: personal)\n• **scrutiny-feature-reviewer** — Code review for a single feature during mission validation. Used only within missions. (model: inherit, location: personal)\n• **user-testing-flow-validator** — Test validation contract assertions through designated contract surfaces during mission validation. Used only within missions. (model: inherit, location: personal)\n\nGUIDANCE: For each user task, first check if any custom droid above is a good match.\nIf one is relevant, launch it immediately rather than attempting the task yourself.\nOnly invoke subagents that are currently available.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "subagent_type": {
+                            "type": "string",
+                            "description": "The type of specialized agent to use for this task"
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "A short (3-5 word) description of the task"
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": "The task for the agent to perform"
+                        }
+                    },
+                    "required": [
+                        "subagent_type",
+                        "description",
+                        "prompt"
+                    ],
+                    "additionalProperties": false,
+                    "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+            }
+        }
+    ],
+    "stream": true,
+    "stream_options": {
+        "include_usage": true
+    },
+    "max_tokens": 64000,
+    "temperature": 1
+}
