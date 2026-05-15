@@ -143,63 +143,6 @@ ls: cannot access '/.dockerenv': No such file or directory
 
 # Codebase and user instructions are shown below. Instructions from files closest to your current directory take precedence over those further up the hierarchy.
 ## Project Instructions:
-% cat /home/hiennx/Documents/portfolio-management-v2/AGENTS.md
-<coding_guidelines>
-# AGENTS.md
-
-Portfolio management monorepo: Go backend in `api/`, React SPA frontend in `frontend/`, and product/architecture docs in `docs/`.
-
-## Quick Reference
-
-- Current implementation truth: `CONTEXT.md`
-- Architecture decisions: `docs/adr/README.md`
-- Backend workdir: `cd api`
-- Frontend workdir: `cd frontend`
-- Minimum backend verification: `cd api && GOCACHE=/tmp/go-build go test ./...`
-- Minimum frontend verification: `cd frontend && pnpm test`
-- Docker stack: `docker compose up -d --build` (runs `migrate` before `api` and `worker`)
-- Full CI/pre-push command surface: read `docs/agent-instructions/commands-and-env.md`
-
-## Mini Repo Map
-
-- `api/`: Go backend, Huma/Fiber HTTP API, worker, migrations, sqlc queries/generated code.
-- `frontend/`: React SPA, TanStack Router/Query, Zod API-boundary parsing.
-- `docs/`: PRD, UX, architecture notes, agent instructions.
-- `docker-compose.yml`: Postgres, Redis, API, worker, migrate, web, Traefik stack.
-
-## Critical Rules
-
-- Treat checked-in Go/React code as implementation baseline; do not mirror legacy Python codebase.
-- Keep portfolio pipeline explicit: source-of-truth writes -> projection rebuild -> snapshot/metrics read models.
-- Use portfolio timezone as business-date boundary in rebuild logic.
-- Missing required price data during snapshot generation is hard failure.
-- Do not manually edit generated SQLC code in `api/db/sqlc`.
-- Keep frontend flows portfolio-centered with one active portfolio context.
-- Preserve API-boundary validation: Huma on backend, Zod parsing on frontend.
-
-## Instruction Index
-
-Read these only when task matches scope:
-
-| File | Read when | Contains |
-|---|---|---|
-| `docs/agent-instructions/project-context.md` | Task changes product behavior, domain flow, portfolio ownership, or source-of-truth assumptions | Product model, domain contracts, source docs |
-| `docs/agent-instructions/architecture-and-runtime.md` | Task changes backend/frontend boundaries, API routing, async jobs, rebuild flow, or Docker runtime | Runtime shape, layers, request/job flow, wiring rules |
-| `docs/agent-instructions/development-rules.md` | Task adds or modifies backend/frontend code, DB schema/query files, API contracts, or UI flow structure | Placement rules, layer boundaries, SQLC workflow, naming, UI guardrails |
-| `docs/agent-instructions/commands-and-env.md` | Task needs setup, run, build, test, lint, CI, security, migration, sqlc, or env commands | Exact commands, workdirs, env vars, verification expectations |
-| `docs/agent-instructions/quality-and-risk.md` | Task touches finance math, auth, ownership, external sync, async locks, read models, performance, or risky tests | High-risk areas, security guardrails, performance rules, focused test priorities |
-
-## Reference Docs
-
-- Current implementation truth: `CONTEXT.md`
-- Architecture decision records: `docs/adr/README.md`
-- Product requirements: `docs/prd.md`
-- UX direction: `docs/developments/ui-ux-design.md`
-- Backend deep dive: `api/README.md`
-- Backend workspace rules: `api/AGENTS.md`
-- Frontend workspace rules: `frontend/AGENTS.md`
-</coding_guidelines>
-
 
 
 IMPORTANT:
